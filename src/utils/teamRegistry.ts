@@ -2,6 +2,18 @@ import { DivisionTeam } from '../types';
 
 const KEY = 'sweepinganku:joinedTeams';
 
+// Capture the team before the legacy startup logic can rewrite its division.
+let startupActiveTeam: DivisionTeam | null = null;
+try {
+  const raw = localStorage.getItem('sweepinganku:activeTeam');
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed?.teamCode && parsed?.division) startupActiveTeam = parsed;
+  }
+} catch {
+  startupActiveTeam = null;
+}
+
 export function loadJoinedTeams(): DivisionTeam[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -22,21 +34,37 @@ export function saveJoinedTeam(team: DivisionTeam): void {
     next.push({ ...team, teamCode: normalizedCode, lastUpdated: new Date().toISOString() });
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
-    // localStorage may be unavailable; the active team still remains usable in memory.
+    // localStorage may be unavailable.
   }
 }
 
 export function getJoinedDivisions(): string[] {
-  return Array.from(new Set(loadJoinedTeams().map((team) => team.division).filter(Boolean)));
+  const divisions = new Set<string>();
+  loadJoinedTeams().forEach((team) => divisions.add(team.division));
+  if (startupActiveTeam?.division) divisions.add(startupActiveTeam.division);
+
+  // Newer cached patient records carry division metadata. This preserves
+  // divisions that were used before this registry was introduced.
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sweepinganku')) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((patient) => {
+          if (patient?.division) divisions.add(String(patient.division));
+        });
+      }
+    }
+  } catch {
+    // Ignore malformed legacy cache entries.
+  }
+
+  return Array.from(divisions);
 }
 
 export function getSavedActiveTeam(): DivisionTeam | null {
-  try {
-    const raw = localStorage.getItem('sweepinganku:activeTeam');
-    if (!raw) return null;
-    const team = JSON.parse(raw);
-    return team && team.teamCode && team.division ? team : null;
-  } catch {
-    return null;
-  }
+  return startupActiveTeam;
 }
