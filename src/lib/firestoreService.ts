@@ -1,7 +1,6 @@
 /**
- * firestoreService.ts
- * Layer sinkronisasi Firestore untuk data pasien tim.
- * Koleksi: sweepinganku/{patientId}
+ * Firestore synchronization layer for Swepinganku patient data.
+ * Collection: sweepinganku/{patientId}
  */
 
 import {
@@ -21,34 +20,30 @@ import { Patient } from '../types';
 
 const COLLECTION = 'sweepinganku';
 
-/** Buat ID dokumen yang unik dan aman untuk Firestore */
-function makeDocId(patient: Patient): string {
-  // Sanitize: hanya alfanumerik, _, -, .
-  const safe = (s: string) => s.replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
+function makeDocId(patient: Patient & { teamCode?: string; date?: string }): string {
+  const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
   return `${safe(patient.teamCode || 'NOTEAM')}_${safe(patient.date)}_${safe(patient.rm || patient.id)}`;
 }
 
-/** Simpan seluruh daftar pasien untuk satu tim & tanggal ke Firestore */
+/** Save the complete patient list for one team/date. */
 export async function savePatientsBatch(
   teamCode: string,
   date: string,
   patients: Patient[]
 ): Promise<void> {
+  if (!teamCode) throw new Error('Kode tim Firebase kosong.');
+
   try {
-    // 1. Hapus data lama untuk teamCode + date ini
     const q = query(
       collection(db, COLLECTION),
       where('teamCode', '==', teamCode),
       where('date', '==', date)
     );
     const existing = await getDocs(q);
-
     const batch = writeBatch(db);
 
-    // Hapus dokumen lama
     existing.docs.forEach((d) => batch.delete(d.ref));
 
-    // Tulis dokumen baru
     patients.forEach((p) => {
       const docId = makeDocId({ ...p, teamCode, date });
       const ref = doc(db, COLLECTION, docId);
@@ -62,11 +57,12 @@ export async function savePatientsBatch(
 
     await batch.commit();
   } catch (err) {
-    console.warn('[Firestore] savePatientsBatch gagal, data tetap di localStorage:', err);
+    console.error('[Firestore] savePatientsBatch gagal:', err);
+    throw err;
   }
 }
 
-/** Ambil pasien untuk satu tim & tanggal dari Firestore (satu kali fetch) */
+/** Fetch patients for one team/date. */
 export async function fetchPatientsFromFirestore(
   teamCode: string,
   date: string
@@ -78,23 +74,20 @@ export async function fetchPatientsFromFirestore(
       where('date', '==', date)
     );
     const snap = await getDocs(q);
-    if (snap.empty) return null;
+    if (snap.empty) return [];
     return snap.docs.map((d) => d.data() as Patient);
   } catch (err) {
-    console.warn('[Firestore] fetchPatientsFromFirestore gagal:', err);
-    return null;
+    console.error('[Firestore] fetchPatientsFromFirestore gagal:', err);
+    throw err;
   }
 }
 
-/**
- * Langganan real-time ke pasien tim & tanggal tertentu.
- * Memanggil callback setiap kali data berubah.
- * Kembalikan fungsi unsubscribe untuk membersihkan listener.
- */
+/** Subscribe to real-time changes for one team/date. */
 export function subscribeToPatients(
   teamCode: string,
   date: string,
-  callback: (patients: Patient[]) => void
+  callback: (patients: Patient[]) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe {
   const q = query(
     collection(db, COLLECTION),
@@ -102,38 +95,40 @@ export function subscribeToPatients(
     where('date', '==', date)
   );
 
-  const unsub = onSnapshot(
+  return onSnapshot(
     q,
     (snap) => {
-      const patients = snap.docs.map((d) => d.data() as Patient);
-      callback(patients);
+      // The Firestore snapshot is the source of truth. In particular, [] must
+      // clear the local view so deletes propagate to every connected device.
+      callback(snap.docs.map((d) => d.data() as Patient));
     },
     (err) => {
-      console.warn('[Firestore] subscribeToPatients error:', err);
+      console.error('[Firestore] subscribeToPatients error:', err);
+      onError?.(err);
     }
   );
-
-  return unsub;
 }
 
-/** Hapus satu pasien dari Firestore */
+/** Delete one patient from Firestore. */
 export async function deletePatientFromFirestore(
-  patient: Patient
+  patient: Patient & { teamCode?: string; date?: string }
 ): Promise<void> {
   try {
-    const docId = makeDocId(patient);
-    await deleteDoc(doc(db, COLLECTION, docId));
+    await deleteDoc(doc(db, COLLECTION, makeDocId(patient)));
   } catch (err) {
-    console.warn('[Firestore] deletePatientFromFirestore gagal:', err);
+    console.error('[Firestore] deletePatientFromFirestore gagal:', err);
+    throw err;
   }
 }
 
-/** Upsert satu pasien ke Firestore */
+/** Upsert one patient into Firestore. */
 export async function upsertPatientToFirestore(
   patient: Patient,
   teamCode: string,
   date: string
 ): Promise<void> {
+  if (!teamCode) throw new Error('Kode tim Firebase kosong.');
+
   try {
     const docId = makeDocId({ ...patient, teamCode, date });
     await setDoc(doc(db, COLLECTION, docId), {
@@ -143,6 +138,7 @@ export async function upsertPatientToFirestore(
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.warn('[Firestore] upsertPatientToFirestore gagal:', err);
+    console.error('[Firestore] upsertPatientToFirestore gagal:', err);
+    throw err;
   }
 }
