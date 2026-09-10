@@ -1,8 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\-\.:]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.:]+$');
     }
 
     function isValidSweepingPatient(data) {
@@ -22,6 +23,16 @@ service cloud.firestore {
         && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
     }
 
+    function isValidTeam(data) {
+      return data.keys().hasAll(['teamCode', 'division', 'teamName', 'weekStart', 'weekEnd'])
+        && data.teamCode is string && data.teamCode.size() > 0 && data.teamCode.size() <= 50
+        && data.division is string && data.division.size() > 0 && data.division.size() <= 100
+        && data.teamName is string && data.teamName.size() > 0 && data.teamName.size() <= 200
+        && data.weekStart is string && data.weekStart.size() == 10
+        && data.weekEnd is string && data.weekEnd.size() == 10
+        && (!('members' in data) || data.members is list);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
@@ -31,6 +42,22 @@ service cloud.firestore {
       allow create: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data);
       allow update: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data);
       allow delete: if request.auth != null && isValidId(patientId);
+    }
+
+    // Shared team document. Any authenticated member who knows the team PIN
+    // can read/update the shared team name. This is required so a name change
+    // propagates to every account currently using the same team.
+    match /teams/{teamCode} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && isValidId(teamCode)
+        && isValidTeam(request.resource.data)
+        && request.resource.data.teamCode == teamCode;
+      allow update: if request.auth != null
+        && isValidId(teamCode)
+        && isValidTeam(request.resource.data)
+        && request.resource.data.teamCode == teamCode;
+      allow delete: if false;
     }
 
     match /teamMembers/{teamCode}/members/{uid} {
@@ -43,24 +70,6 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.email.size() <= 320;
       allow delete: if request.auth != null && request.auth.uid == uid;
-    }
-
-    // Shared metadata for a team. Any authenticated member can rename the team;
-    // every connected client receives the change through Firestore onSnapshot.
-    match /teams/{teamCode} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
-        && request.resource.data.teamCode == teamCode
-        && request.resource.data.division is string
-        && request.resource.data.division.size() > 0
-        && request.resource.data.division.size() <= 100
-        && request.resource.data.teamName is string
-        && request.resource.data.teamName.size() > 0
-        && request.resource.data.teamName.size() <= 200
-        && request.resource.data.members is list
-        && request.resource.data.members.size() <= 100
-        && request.resource.data.weekStart is string
-        && request.resource.data.weekEnd is string;
     }
   }
 }
