@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.:]+$');
+    }
+
+    function isValidSweepingPatient(data) {
+      return data.keys().hasAll(['id', 'name', 'jk', 'rm', 'room', 'dpjp', 'date', 'division'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && (data.jk == 'L' || data.jk == 'P')
+        && (!('age' in data) || (data.age is string && data.age.size() <= 50))
+        && data.rm is string && data.rm.size() <= 50
+        && data.room is string && data.room.size() <= 100
+        && (!('kamar' in data) || (data.kamar is string && data.kamar.size() <= 50))
+        && data.dpjp is string && data.dpjp.size() <= 200
+        && (!('dx' in data) || (data.dx is string && data.dx.size() <= 1000))
+        && data.date is string && data.date.size() <= 20
+        && data.division is string && data.division.size() <= 100
+        && (!('teamCode' in data) || (data.teamCode is string && data.teamCode.size() <= 50))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Collection sweepinganku as requested for multi-device sync
+    match /sweepinganku/{patientId} {
+      allow read: if true;
+      allow create: if isValidId(patientId) && isValidSweepingPatient(request.resource.data);
+      allow update: if isValidId(patientId) && isValidSweepingPatient(request.resource.data);
+      allow delete: if isValidId(patientId);
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "SweepingPatient": {
+      "title": "SweepingPatient",
+      "description": "Data rekam sweeping pasien bedah per tanggal dan tim untuk sinkronisasi antar perangkat",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID unik rekam pasien",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama pasien",
+          "maxLength": 200
+        },
+        "jk": {
+          "type": "string",
+          "description": "Jenis kelamin L atau P",
+          "enum": ["L", "P"]
+        },
+        "age": {
+          "type": "string",
+          "description": "Usia pasien beserta satuan",
+          "maxLength": 50
+        },
+        "rm": {
+          "type": "string",
+          "description": "Nomor Rekam Medis pasien",
+          "maxLength": 50
+        },
+        "room": {
+          "type": "string",
+          "description": "Nama ruangan atau bangsal",
+          "maxLength": 100
+        },
+        "kamar": {
+          "type": "string",
+          "description": "Nomor kamar atau bed pasien",
+          "maxLength": 50
+        },
+        "dpjp": {
+          "type": "string",
+          "description": "Nama dokter DPJP",
+          "maxLength": 200
+        },
+        "dx": {
+          "type": "string",
+          "description": "Diagnosis klinis pasien",
+          "maxLength": 1000
+        },
+        "date": {
+          "type": "string",
+          "description": "Tanggal sweeping format YYYY-MM-DD",
+          "maxLength": 20
+        },
+        "division": {
+          "type": "string",
+          "description": "Divisi bedah",
+          "maxLength": 100
+        },
+        "teamCode": {
+          "type": "string",
+          "description": "Kode tim atau PIN divisi",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Waktu terakhir pembaruan",
+          "maxLength": 50
+        }
+      },
+      "required": ["id", "name", "jk", "rm", "room", "dpjp", "date", "division"]
+    }
+  },
+  "firestore": {
+    "/sweepinganku/{patientId}": {
+      "schema": "#/entities/SweepingPatient",
+      "description": "Koleksi sweepinganku berisi data pasien yang disinkronkan antar perangkat secara real-time"
+    }
+  }
+}

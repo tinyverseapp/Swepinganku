@@ -8,25 +8,37 @@ interface PatientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onQuickShare?: () => void;
+  isCompact?: boolean;
 }
 
-export function PatientCard({ patient, onEdit, onDelete, onQuickShare }: PatientCardProps) {
+export function PatientCard({ patient, onEdit, onDelete, onQuickShare, isCompact = false }: PatientCardProps) {
   const isMale = patient.jk === 'L';
   const isBed = isBedRoom(patient.room);
   const formattedLocation = formatKamarOrBed(patient.room, patient.kamar);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between">
+    <div
+      className={`bg-white border border-slate-200 rounded-xl shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between ${
+        isCompact ? 'p-2.5 sm:p-3 space-y-2' : 'p-4'
+      }`}
+    >
       <div>
         {/* Header with Name & Room */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h4 className="font-bold text-sm text-slate-900 leading-snug">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="min-w-0 flex-1">
+            <h4
+              className={`font-bold text-slate-900 leading-snug truncate ${
+                isCompact ? 'text-xs sm:text-[13px]' : 'text-sm'
+              }`}
+              title={patient.name}
+            >
               {patient.name}
             </h4>
-            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            <div className={`flex flex-wrap items-center gap-1.5 ${isCompact ? 'mt-0.5' : 'mt-1'}`}>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                className={`font-bold rounded-full ${
+                  isCompact ? 'text-[9px] px-1.5 py-0.2' : 'text-[10px] px-2 py-0.5'
+                } ${
                   isMale
                     ? 'bg-blue-100 text-blue-800'
                     : 'bg-rose-100 text-rose-800'
@@ -34,14 +46,20 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare }: Patient
               >
                 {patient.jk} · {patient.age || 'Usia -'}
               </span>
-              <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+              <span
+                className={`font-mono font-semibold text-slate-600 bg-slate-100 rounded-md ${
+                  isCompact ? 'text-[10px] px-1.5 py-0.2' : 'text-xs px-2 py-0.5'
+                }`}
+              >
                 RM: {patient.rm}
               </span>
             </div>
           </div>
 
           <span
-            className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg border ${
+            className={`shrink-0 font-bold border ${
+              isCompact ? 'text-[10.5px] px-2 py-0.5 rounded-md' : 'text-xs px-2.5 py-1 rounded-lg'
+            } ${
               isBed
                 ? 'bg-purple-50 text-purple-800 border-purple-200 font-mono'
                 : 'bg-slate-100 text-slate-800 border-slate-200'
@@ -53,39 +71,57 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare }: Patient
         </div>
 
         {/* DPJP & Diagnosis */}
-        <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2 text-xs">
+        <div
+          className={`border-t border-slate-100 ${
+            isCompact ? 'mt-2 pt-1.5 space-y-1 text-[11px]' : 'mt-3 pt-2.5 space-y-2 text-xs'
+          }`}
+        >
           <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-            <Stethoscope className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <Stethoscope className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-600 shrink-0`} />
             <span className="truncate">{patient.dpjp}</span>
           </div>
-          <div className="text-slate-800 font-normal bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-[11px] leading-relaxed whitespace-pre-wrap">
+          <div
+            className={`text-slate-800 font-normal bg-slate-50 border border-slate-100 rounded-lg leading-relaxed whitespace-pre-wrap ${
+              isCompact
+                ? 'p-1.5 text-[10.5px] line-clamp-2 hover:line-clamp-none transition-all'
+                : 'p-2.5 text-[11px]'
+            }`}
+          >
             {patient.dx || 'Diagnosis klinis belum diisi.'}
           </div>
         </div>
       </div>
 
       {/* Footer / Actions */}
-      <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-end">
-        <div className="flex items-center gap-1">
+      <div
+        className={`border-t border-slate-100 flex items-center justify-end ${
+          isCompact ? 'mt-2 pt-1.5' : 'mt-3.5 pt-2.5'
+        }`}
+      >
+        <div className="flex items-center gap-0.5 sm:gap-1">
           {onQuickShare && (
             <button
               type="button"
               onClick={onQuickShare}
-              className="min-w-[36px] min-h-[36px] p-2 sm:p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+              className={`text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
+                isCompact ? 'min-w-[28px] min-h-[28px] p-1.5' : 'min-w-[36px] min-h-[36px] p-2 sm:p-1.5'
+              }`}
               title="Salin Data Pasien Ini"
               aria-label="Salin data pasien"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className={isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
             </button>
           )}
           <button
             type="button"
             onClick={onEdit}
-            className="min-w-[36px] min-h-[36px] p-2 sm:p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+            className={`text-slate-500 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
+              isCompact ? 'min-w-[28px] min-h-[28px] p-1.5' : 'min-w-[36px] min-h-[36px] p-2 sm:p-1.5'
+            }`}
             title="Edit Pasien"
             aria-label="Edit data pasien"
           >
-            <Edit2 className="w-4 h-4" />
+            <Edit2 className={isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
           </button>
           <button
             type="button"
@@ -93,11 +129,13 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare }: Patient
               e.stopPropagation();
               onDelete();
             }}
-            className="min-w-[36px] min-h-[36px] p-2 sm:p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+            className={`text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
+              isCompact ? 'min-w-[28px] min-h-[28px] p-1.5' : 'min-w-[36px] min-h-[36px] p-2 sm:p-1.5'
+            }`}
             title="Hapus Pasien"
             aria-label={`Hapus data pasien ${patient.name}`}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className={isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
           </button>
         </div>
       </div>

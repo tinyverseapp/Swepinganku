@@ -16,6 +16,8 @@ import {
   today,
   getKoasName,
   saveKoasName,
+  getCompactMode,
+  setCompactMode,
   loadPatients,
   savePatients,
   loadCurrentTeam,
@@ -45,6 +47,7 @@ import { DocumentSweepingView } from './components/DocumentSweepingView';
 import { RotationModal } from './components/RotationModal';
 import { TeamSwitchModal } from './components/TeamSwitchModal';
 import { NextjsRepoModal } from './components/NextjsRepoModal';
+import { SettingsModal } from './components/SettingsModal';
 
 import {
   Users,
@@ -55,7 +58,10 @@ import {
   FileSpreadsheet,
   Stethoscope,
   Sparkles,
-  Search
+  Search,
+  Settings,
+  Minimize2,
+  Maximize2
 } from 'lucide-react';
 
 export default function App() {
@@ -94,6 +100,10 @@ export default function App() {
   const [isRotationModalOpen, setIsRotationModalOpen] = useState<boolean>(false);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState<boolean>(false);
   const [isNextjsModalOpen, setIsNextjsModalOpen] = useState<boolean>(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+
+  // Compact Mode state (loaded from persistent storage)
+  const [compactMode, setCompactModeState] = useState<boolean>(() => getCompactMode());
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -101,6 +111,19 @@ export default function App() {
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
   }, []);
+
+  const handleToggleCompactMode = useCallback(() => {
+    setCompactModeState((prev) => {
+      const next = !prev;
+      setCompactMode(next);
+      showToast(
+        next
+          ? 'Mode Ringkas diaktifkan (tampilan lebih padat & hemat ruang)'
+          : 'Mode Ringkas dinonaktifkan (tampilan kartu standar)'
+      );
+      return next;
+    });
+  }, [showToast]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -342,6 +365,7 @@ export default function App() {
         onOpenNextjsModal={() => setIsNextjsModalOpen(true)}
         activeTeam={activeTeam}
         onOpenTeamModal={() => setIsTeamModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -432,6 +456,42 @@ export default function App() {
                     </>
                   )}
                 </div>
+
+                {/* Compact Mode Quick Toggle & Settings Button */}
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleCompactMode}
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+                      compactMode
+                        ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                    title="Beralih antara tampilan kartu standar dan mode ringkas padat"
+                  >
+                    {compactMode ? (
+                      <>
+                        <Minimize2 className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="hidden sm:inline">Mode Ringkas:</span> <b>Aktif</b>
+                      </>
+                    ) : (
+                      <>
+                        <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="hidden sm:inline">Mode Ringkas:</span> <span>Standar</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsModalOpen(true)}
+                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    title="Buka Pengaturan Aplikasi"
+                    aria-label="Buka Pengaturan"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* DPJP Filter Horizontal Scroll */}
@@ -511,11 +571,18 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              <div
+                className={`grid ${
+                  compactMode
+                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3'
+                    : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4'
+                }`}
+              >
                 {filteredPatients.map((patient) => (
                   <PatientCard
                     key={patient.id}
                     patient={patient}
+                    isCompact={compactMode}
                     onEdit={() => {
                       setEditingPatient(patient);
                       setIsPatientModalOpen(true);
@@ -612,6 +679,18 @@ export default function App() {
       <NextjsRepoModal
         isOpen={isNextjsModalOpen}
         onClose={() => setIsNextjsModalOpen(false)}
+      />
+
+      {/* 8. Settings Modal (Compact Mode & Koas Profile) */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        compactMode={compactMode}
+        onToggleCompactMode={handleToggleCompactMode}
+        koasName={koasName}
+        onUpdateKoasName={handleUpdateKoasName}
+        activeTeam={activeTeam}
+        onOpenTeamModal={() => setIsTeamModalOpen(true)}
       />
     </div>
   );

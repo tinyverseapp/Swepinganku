@@ -387,6 +387,20 @@ export function setKoasName(name: string): void {
   localStorage.setItem(`${KEY_PREFIX}:koasName`, name);
 }
 
+export function getCompactMode(): boolean {
+  try {
+    return localStorage.getItem(`${KEY_PREFIX}:compactMode`) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setCompactMode(enabled: boolean): void {
+  try {
+    localStorage.setItem(`${KEY_PREFIX}:compactMode`, enabled ? 'true' : 'false');
+  } catch {}
+}
+
 export const saveKoasName = setKoasName;
 export const loadCurrentTeam = (division?: string, koasName?: string) => getActiveTeam(division, koasName);
 export const saveCurrentTeam = setActiveTeam;

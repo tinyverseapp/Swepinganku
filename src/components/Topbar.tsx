@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Stethoscope, UserCheck, Edit2, Check, FileText, LayoutGrid } from 'lucide-react';
+import { Stethoscope, UserCheck, Edit2, Check, FileText, LayoutGrid, Settings } from 'lucide-react';
 import { PageMode, DivisionTeam } from '../types';
 
 interface TopbarProps {
@@ -11,6 +11,7 @@ interface TopbarProps {
   onOpenNextjsModal?: () => void;
   activeTeam?: DivisionTeam;
   onOpenTeamModal?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function Topbar({
@@ -18,6 +19,7 @@ export function Topbar({
   onUpdateKoasName,
   pageMode = 'dashboard',
   onPageModeChange,
+  onOpenSettings,
 }: TopbarProps) {
   const [isEditingKoas, setIsEditingKoas] = useState(false);
   const [tempName, setTempName] = useState(koasName);
@@ -89,35 +91,49 @@ export function Topbar({
           </div>
         </div>
 
-        {/* View Mode Switcher (Kartu vs Dokumen) - ALWAYS VISIBLE ON BOTH MOBILE & DESKTOP */}
-        {onPageModeChange && (
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold w-full sm:w-auto">
+        {/* View Mode Switcher and Settings */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          {onPageModeChange && (
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold flex-1 sm:flex-initial">
+              <button
+                type="button"
+                onClick={() => onPageModeChange('dashboard')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 py-2 sm:py-1.5 px-3 rounded-lg transition-all cursor-pointer min-h-[36px] ${
+                  pageMode === 'dashboard'
+                    ? 'bg-white text-blue-700 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 active:bg-slate-200/60'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                <span>Kartu Pasien</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onPageModeChange('document')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 py-2 sm:py-1.5 px-3 rounded-lg transition-all cursor-pointer min-h-[36px] ${
+                  pageMode === 'document'
+                    ? 'bg-white text-blue-700 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 active:bg-slate-200/60'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span>Dokumen Sweeping</span>
+              </button>
+            </div>
+          )}
+
+          {onOpenSettings && (
             <button
               type="button"
-              onClick={() => onPageModeChange('dashboard')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 py-2 sm:py-1.5 px-3 rounded-lg transition-all cursor-pointer min-h-[36px] ${
-                pageMode === 'dashboard'
-                  ? 'bg-white text-blue-700 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 active:bg-slate-200/60'
-              }`}
+              onClick={onOpenSettings}
+              className="p-2 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0"
+              title="Buka Pengaturan (Mode Ringkas, Profil, dll)"
+              aria-label="Buka Pengaturan"
             >
-              <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
-              <span>Kartu Pasien</span>
+              <Settings className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => onPageModeChange('document')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 py-2 sm:py-1.5 px-3 rounded-lg transition-all cursor-pointer min-h-[36px] ${
-                pageMode === 'document'
-                  ? 'bg-white text-blue-700 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 active:bg-slate-200/60'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5 shrink-0" />
-              <span>Dokumen Sweeping</span>
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );
