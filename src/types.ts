@@ -9,6 +9,10 @@ export interface Patient {
   rm: string;
   dx: string;
   updatedAt: string;
+  /** Firebase synchronization metadata. Kept optional for backwards compatibility with local cache. */
+  teamCode?: string;
+  date?: string;
+  division?: string;
 }
 
 export type ViewMode = 'dpjp' | 'all';
