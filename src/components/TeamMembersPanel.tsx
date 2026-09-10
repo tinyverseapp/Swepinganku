@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Users, Circle, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Users, Circle, RefreshCw, ChevronDown } from 'lucide-react';
 import { subscribeToTeamMembers, registerTeamMember, TeamMember } from '../lib/teamMembersService';
 import { getSavedActiveTeam } from '../utils/teamRegistry';
 import { auth } from '../lib/firebase';
@@ -9,6 +9,8 @@ export function TeamMembersPanel() {
   const [teamName, setTeamName] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const readTeam = () => {
@@ -20,11 +22,20 @@ export function TeamMembersPanel() {
         setTeamName(team?.teamName || 'Tim aktif');
       } catch {
         setTeamCode('');
+        setTeamName('');
       }
     };
     readTeam();
     const timer = window.setInterval(readTeam, 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -44,20 +55,54 @@ export function TeamMembersPanel() {
   if (!teamCode) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 z-50 w-[min(340px,calc(100vw-1.5rem))] rounded-2xl border border-slate-200 bg-white/95 backdrop-blur shadow-xl overflow-hidden">
-      <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
-        <div className="min-w-0"><div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800"><Users className="w-4 h-4 text-blue-600" />Anggota Tim</div><div className="text-[10px] text-slate-500 truncate mt-0.5">{teamName} · {teamCode}</div></div>
-        <span className="shrink-0 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-full">{members.length} orang</span>
-      </div>
-      <div className="max-h-44 overflow-y-auto px-3 py-2">
-        {error ? <div className="flex items-center gap-2 py-2 text-xs text-amber-700"><RefreshCw className="w-3.5 h-3.5" />{error}</div> : members.length === 0 ? <div className="py-3 text-xs text-slate-400 text-center">Belum ada anggota terdaftar.</div> : <div className="space-y-1">
-          {members.map((member) => <div key={member.uid} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-slate-50">
-            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-extrabold shrink-0">{(member.name || member.email || '?').trim().charAt(0).toUpperCase()}</div>
-            <div className="min-w-0 flex-1"><div className="text-xs font-bold text-slate-800 truncate">{member.name || 'Pengguna'}</div><div className="text-[10px] text-slate-500 truncate">{member.email || 'Email tidak tersedia'}</div></div>
-            <Circle className="w-2.5 h-2.5 fill-emerald-500 text-emerald-500 shrink-0" title="Anggota tim" />
-          </div>)}
-        </div>}
-      </div>
+    <div ref={panelRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-2 min-h-9 max-w-[180px] sm:max-w-[240px] rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-2.5 sm:px-3 transition-colors cursor-pointer"
+        aria-label="Lihat anggota tim"
+        aria-expanded={open}
+      >
+        <Users className="w-4 h-4 text-blue-600 shrink-0" />
+        <span className="text-xs font-bold text-slate-700 truncate">{teamName}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+8px)] w-[min(340px,calc(100vw-1.5rem))] rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
+          <div className="px-4 py-3 bg-gradient-to-br from-blue-50 to-white border-b border-slate-100">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-extrabold text-slate-900 truncate">{teamName}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Kode tim: {teamCode}</div>
+              </div>
+              <span className="shrink-0 text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">{members.length} akun</span>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-2">
+            {error ? (
+              <div className="flex items-center gap-2 px-3 py-3 text-xs text-amber-700"><RefreshCw className="w-3.5 h-3.5" />{error}</div>
+            ) : members.length === 0 ? (
+              <div className="py-5 text-xs text-slate-400 text-center">Belum ada akun lain di tim ini.</div>
+            ) : (
+              <div className="space-y-0.5">
+                {members.map((member) => (
+                  <div key={member.uid} className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 hover:bg-slate-50">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-extrabold shrink-0">
+                      {(member.name || member.email || '?').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-800 truncate">{member.name || 'Pengguna'}</div>
+                      <div className="text-[10px] text-slate-500 truncate">{member.email || 'Email tidak tersedia'}</div>
+                    </div>
+                    <Circle className="w-2.5 h-2.5 fill-emerald-500 text-emerald-500 shrink-0" title="Terdaftar di tim" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
