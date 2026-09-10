@@ -9,7 +9,6 @@ export interface Patient {
   rm: string;
   dx: string;
   updatedAt: string;
-  /** Firebase synchronization metadata. Kept optional for backwards compatibility with local cache. */
   teamCode?: string;
   date?: string;
   division?: string;
@@ -23,6 +22,8 @@ export interface DivisionTeam {
   division: string;
   teamName: string;
   members: string[];
+  weekStart?: string;
+  weekEnd?: string;
   createdAt?: string;
   lastUpdated?: string;
 }
