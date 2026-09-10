@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "database": "ai-studio-sweepinganku-7b577169-323b-497e-b0c6-aa0e56f181f5",
+    "rules": "firestore.rules"
+  }
+}
