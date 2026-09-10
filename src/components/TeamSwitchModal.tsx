@@ -6,24 +6,10 @@ import { today } from '../utils/storage';
 import { getCurrentWeekRange, getTeam, createOrUpdateTeam, updateTeamName } from '../lib/teamService';
 import { Users, KeyRound, Copy, Check, X, RefreshCw, ArrowLeftRight, ShieldCheck, CalendarDays } from 'lucide-react';
 
-interface TeamSwitchModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentTeam: DivisionTeam;
-  currentDivision: string;
-  koasName: string;
-  onSwitchTeam: (newTeam: DivisionTeam, carryOverFromYesterday: boolean) => void;
-}
-
-function previousWeekStart(weekStart: string) {
-  const d = new Date(`${weekStart}T12:00:00`);
-  d.setDate(d.getDate() - 7);
-  return d.toISOString().slice(0, 10);
-}
-
-function getWeekLabel(start: string, end: string) {
-  return `${start} s/d ${end}`;
-}
+interface TeamSwitchModalProps { isOpen: boolean; onClose: () => void; currentTeam: DivisionTeam; currentDivision: string; koasName: string; onSwitchTeam: (newTeam: DivisionTeam, carryOverFromYesterday: boolean) => void; }
+function previousWeekStart(weekStart: string) { const d = new Date(`${weekStart}T12:00:00`); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); }
+function getWeekLabel(start: string, end: string) { return `${start} s/d ${end}`; }
+function friendlyTeamError(err: unknown) { const code = (err as { code?: string })?.code; const message = err instanceof Error ? err.message : String(err || ''); if (code === 'permission-denied' || /missing or insufficient permissions/i.test(message)) return 'Firebase menolak akses ke data tim. Rules Firestore pada project aktif belum ter-deploy atau belum mengizinkan collection teams. Deploy firestore.rules terbaru ke database ai-studio-sweepinganku.'; return message || 'Gagal bergabung atau membuat tim.'; }
 
 export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision, koasName, onSwitchTeam }: TeamSwitchModalProps) {
   const [selectedDivision, setSelectedDivision] = useState(currentDivision || DIVISIONS[0] || '');
@@ -35,121 +21,21 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      const initialDivision = currentDivision || DIVISIONS[0] || '';
-      const initialDate = currentTeam.weekStart || today();
-      setSelectedDivision(initialDivision);
-      setTeamCodeInput(currentTeam.teamCode || getDefaultTeamCode(initialDivision));
-      setTeamNameInput(currentTeam.teamName || `Tim ${initialDivision}`);
-      setMemberNameInput(koasName);
-      setWeekDate(initialDate);
-      setError('');
-    }
-  }, [isOpen, currentDivision, currentTeam, koasName]);
-
+  useEffect(() => { if (isOpen) { const initialDivision = currentDivision || DIVISIONS[0] || ''; const initialDate = currentTeam.weekStart || today(); setSelectedDivision(initialDivision); setTeamCodeInput(currentTeam.teamCode || getDefaultTeamCode(initialDivision)); setTeamNameInput(currentTeam.teamName || `Tim ${initialDivision}`); setMemberNameInput(koasName); setWeekDate(initialDate); setError(''); } }, [isOpen, currentDivision, currentTeam, koasName]);
   if (!isOpen) return null;
-
   const week = getCurrentWeekRange(weekDate);
-
-  const handleDivisionChange = (division: string) => {
-    setSelectedDivision(division);
-    setTeamCodeInput(getDefaultTeamCode(division));
-    setTeamNameInput(`Tim ${division}`);
-  };
-
-  const handleRandomPin = () => {
-    const prefix = selectedDivision.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase();
-    setTeamCodeInput(`${prefix}-${Math.floor(100 + Math.random() * 900)}`);
-  };
-
+  const handleDivisionChange = (division: string) => { setSelectedDivision(division); setTeamCodeInput(getDefaultTeamCode(division)); setTeamNameInput(`Tim ${division}`); };
+  const handleRandomPin = () => { const prefix = selectedDivision.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase(); setTeamCodeInput(`${prefix}-${Math.floor(100 + Math.random() * 900)}`); };
   const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError('');
-    setBusy(true);
+    event.preventDefault(); setError(''); setBusy(true);
     try {
-      const cleanCode = teamCodeInput.trim().toUpperCase() || getDefaultTeamCode(selectedDivision);
-      const cleanName = teamNameInput.trim() || `Tim ${selectedDivision}`;
-      const cleanMember = memberNameInput.trim() || koasName || 'Pengguna';
-      const existing = await getTeam(cleanCode);
-
-      let finalTeam: DivisionTeam;
-      if (existing) {
-        if (existing.division !== selectedDivision) throw new Error(`PIN ${cleanCode} adalah milik divisi ${existing.division}, bukan ${selectedDivision}.`);
-        if (existing.weekStart && existing.weekStart !== week.weekStart) {
-          throw new Error(`Tim ini sudah dikunci untuk pekan ${getWeekLabel(existing.weekStart, existing.weekEnd || getCurrentWeekRange(existing.weekStart).weekEnd)}. Pilih tanggal pada pekan tersebut.`);
-        }
-        finalTeam = { ...existing, teamCode: cleanCode, teamName: cleanName || existing.teamName };
-        await updateTeamName(cleanCode, cleanName || existing.teamName);
-      } else {
-        finalTeam = {
-          teamCode: cleanCode,
-          division: selectedDivision,
-          teamName: cleanName,
-          members: [cleanMember],
-          weekStart: week.weekStart,
-          weekEnd: week.weekEnd,
-          createdAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-        };
-        finalTeam = await createOrUpdateTeam(finalTeam, true);
-      }
-
-      // A division is a one-week assignment. The same account cannot use the
-      // same division in the same week or immediately in the following week.
-      const previous = previousWeekStart(week.weekStart);
-      const duplicate = loadJoinedTeams().find((team) => {
-        if (team.division !== finalTeam.division) return false;
-        if (!team.weekStart) return false;
-        return team.weekStart === week.weekStart || team.weekStart === previous;
-      });
-      if (duplicate && duplicate.teamCode !== finalTeam.teamCode) {
-        throw new Error(`Divisi ${finalTeam.division} sudah dipakai akun ini pada pekan ${duplicate.weekStart}. Pekan berikutnya harus memakai divisi berbeda.`);
-      }
-
-      const members = Array.from(new Set([...(finalTeam.members || []), cleanMember]));
-      finalTeam = { ...finalTeam, members, teamName: cleanName || finalTeam.teamName, weekStart: finalTeam.weekStart || week.weekStart, weekEnd: finalTeam.weekEnd || week.weekEnd, lastUpdated: new Date().toISOString() };
-      saveJoinedTeam(finalTeam);
-      localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(finalTeam));
-      onSwitchTeam(finalTeam, carryOver);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal bergabung ke tim.');
-    } finally {
-      setBusy(false);
-    }
+      const cleanCode = teamCodeInput.trim().toUpperCase() || getDefaultTeamCode(selectedDivision); const cleanName = teamNameInput.trim() || `Tim ${selectedDivision}`; const cleanMember = memberNameInput.trim() || koasName || 'Pengguna'; const existing = await getTeam(cleanCode); let finalTeam: DivisionTeam;
+      if (existing) { if (existing.division !== selectedDivision) throw new Error(`PIN ${cleanCode} adalah milik divisi ${existing.division}, bukan ${selectedDivision}.`); if (existing.weekStart && existing.weekStart !== week.weekStart) throw new Error(`Tim ini sudah dikunci untuk pekan ${getWeekLabel(existing.weekStart, existing.weekEnd || getCurrentWeekRange(existing.weekStart).weekEnd)}. Pilih tanggal pada pekan tersebut.`); finalTeam = { ...existing, teamCode: cleanCode, teamName: cleanName || existing.teamName }; await updateTeamName(cleanCode, cleanName || existing.teamName); }
+      else { finalTeam = { teamCode: cleanCode, division: selectedDivision, teamName: cleanName, members: [cleanMember], weekStart: week.weekStart, weekEnd: week.weekEnd, createdAt: new Date().toISOString(), lastUpdated: new Date().toISOString() }; finalTeam = await createOrUpdateTeam(finalTeam, true); }
+      const previous = previousWeekStart(week.weekStart); const duplicate = loadJoinedTeams().find((team) => team.division === finalTeam.division && !!team.weekStart && (team.weekStart === week.weekStart || team.weekStart === previous)); if (duplicate && duplicate.teamCode !== finalTeam.teamCode) throw new Error(`Divisi ${finalTeam.division} sudah dipakai akun ini pada pekan ${duplicate.weekStart}. Pekan berikutnya harus memakai divisi berbeda.`);
+      const members = Array.from(new Set([...(finalTeam.members || []), cleanMember])); finalTeam = { ...finalTeam, members, teamName: cleanName || finalTeam.teamName, weekStart: finalTeam.weekStart || week.weekStart, weekEnd: finalTeam.weekEnd || week.weekEnd, lastUpdated: new Date().toISOString() }; saveJoinedTeam(finalTeam); localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(finalTeam)); onSwitchTeam(finalTeam, carryOver); onClose();
+    } catch (err) { setError(friendlyTeamError(err)); } finally { setBusy(false); }
   };
-
-  const copyPin = async () => {
-    try { await navigator.clipboard.writeText(currentTeam.teamCode || ''); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 my-auto max-h-[92vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0"><div className="flex items-center gap-2.5"><div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><KeyRound className="w-5 h-5" /></div><div><h2 className="font-extrabold text-base sm:text-lg text-slate-900">Gabung / Buat Tim</h2><p className="text-[11px] text-slate-500">Setiap tim berlaku tepat satu pekan, Senin–Minggu.</p></div></div><button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"><X className="w-5 h-5" /></button></div>
-        <div className="p-5 overflow-y-auto space-y-5">
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs text-red-700 font-medium">{error}</div>}
-          {currentTeam.teamCode && <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] uppercase tracking-wider font-bold text-blue-700 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Tim aktif</div><div className="font-extrabold text-sm text-slate-900 truncate mt-1">{currentTeam.teamName || currentTeam.division}</div><div className="text-[11px] text-slate-500">{currentTeam.division} · PIN {currentTeam.teamCode}</div></div><button type="button" onClick={copyPin} className="shrink-0 px-2.5 py-2 rounded-lg bg-white border border-blue-200 text-xs font-bold text-blue-700 flex items-center gap-1 cursor-pointer">{copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{copied ? 'Tersalin' : 'Salin PIN'}</button></div>}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Divisi Stase</label><select value={selectedDivision} onChange={(e) => handleDivisionChange(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">{(DIVISIONS || []).map((division) => <option key={division} value={division}>{division}</option>)}</select></div>
-
-            <div><label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5"><CalendarDays className="w-4 h-4 text-blue-600" />Tanggal pekan divisi</label><input type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[11px] text-slate-500 mt-1.5">Tanggal apa pun yang dipilih akan otomatis dibulatkan ke <b>Senin–Minggu</b>: {week.weekStart} s/d {week.weekEnd}.</p></div>
-
-            <div><div className="flex items-center justify-between mb-1.5"><label className="text-xs font-bold text-slate-700">Kode Tim / PIN</label><button type="button" onClick={handleRandomPin} className="text-[11px] font-semibold text-blue-600 flex items-center gap-1 cursor-pointer"><RefreshCw className="w-3 h-3" />Acak PIN</button></div><div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={teamCodeInput} onChange={(e) => setTeamCodeInput(e.target.value.toUpperCase())} placeholder="Contoh: URO-101" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div><p className="text-[11px] text-slate-500 mt-1">PIN yang sama akan membuka tim dan daftar pasien yang sama.</p></div>
-
-            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Tim</label><input required value={teamNameInput} onChange={(e) => setTeamNameInput(e.target.value)} placeholder={`Tim ${selectedDivision}`} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[10px] text-slate-400 mt-1">Nama ini disimpan di Firebase dan akan berubah realtime pada semua akun anggota tim.</p></div>
-
-            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Anggota</label><div className="relative"><Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={memberNameInput} onChange={(e) => setMemberNameInput(e.target.value)} placeholder="Nama Anda" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div></div>
-
-            <label className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 cursor-pointer"><input type="checkbox" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="mt-0.5 w-4 h-4 cursor-pointer" /><span className="text-xs"><b className="block text-amber-900">Bawa / operan pasien aktif</b><span className="text-amber-700">Salin pasien dari hari sebelumnya ke tanggal hari ini pada tim yang dipilih.</span></span></label>
-
-            <div className="pt-2 border-t border-slate-100 flex gap-2"><button type="button" onClick={onClose} className="flex-1 min-h-11 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer">Batal</button><button type="submit" disabled={busy} className="flex-1 min-h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60">{busy ? 'Memproses...' : <><ArrowLeftRight className="w-4 h-4" />Masuk / Buat Tim</>}</button></div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
+  const copyPin = async () => { try { await navigator.clipboard.writeText(currentTeam.teamCode || ''); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
+  return <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"><div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 my-auto max-h-[92vh] flex flex-col"><div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0"><div className="flex items-center gap-2.5"><div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><KeyRound className="w-5 h-5" /></div><div><h2 className="font-extrabold text-base sm:text-lg text-slate-900">Gabung / Buat Tim</h2><p className="text-[11px] text-slate-500">Setiap tim berlaku tepat satu pekan, Senin–Minggu.</p></div></div><button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"><X className="w-5 h-5" /></button></div><div className="p-5 overflow-y-auto space-y-5">{error && <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs text-red-700 font-medium">{error}</div>}{currentTeam.teamCode && <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] uppercase tracking-wider font-bold text-blue-700 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Tim aktif</div><div className="font-extrabold text-sm text-slate-900 truncate mt-1">{currentTeam.teamName || currentTeam.division}</div><div className="text-[11px] text-slate-500">{currentTeam.division} · PIN {currentTeam.teamCode}</div></div><button type="button" onClick={copyPin} className="shrink-0 px-2.5 py-2 rounded-lg bg-white border border-blue-200 text-xs font-bold text-blue-700 flex items-center gap-1 cursor-pointer">{copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{copied ? 'Tersalin' : 'Salin PIN'}</button></div>}<form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-xs font-bold text-slate-700 mb-1.5">Divisi Stase</label><select value={selectedDivision} onChange={(e) => handleDivisionChange(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">{(DIVISIONS || []).map((division) => <option key={division} value={division}>{division}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5"><CalendarDays className="w-4 h-4 text-blue-600" />Tanggal pekan divisi</label><input type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[11px] text-slate-500 mt-1.5">Tanggal apa pun akan dibulatkan ke <b>Senin–Minggu</b>: {week.weekStart} s/d {week.weekEnd}.</p></div><div><div className="flex items-center justify-between mb-1.5"><label className="text-xs font-bold text-slate-700">Kode Tim / PIN</label><button type="button" onClick={handleRandomPin} className="text-[11px] font-semibold text-blue-600 flex items-center gap-1 cursor-pointer"><RefreshCw className="w-3 h-3" />Acak PIN</button></div><div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={teamCodeInput} onChange={(e) => setTeamCodeInput(e.target.value.toUpperCase())} placeholder="Contoh: URO-101" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div><p className="text-[11px] text-slate-500 mt-1">PIN yang sama akan membuka tim dan daftar pasien yang sama.</p></div><div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Tim</label><input required value={teamNameInput} onChange={(e) => setTeamNameInput(e.target.value)} placeholder={`Tim ${selectedDivision}`} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[10px] text-slate-400 mt-1">Nama disimpan di Firebase dan tersinkron realtime ke semua akun dalam tim.</p></div><div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Anggota</label><div className="relative"><Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={memberNameInput} onChange={(e) => setMemberNameInput(e.target.value)} placeholder="Nama Anda" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div></div><label className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 cursor-pointer"><input type="checkbox" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="mt-0.5 w-4 h-4 cursor-pointer" /><span className="text-xs"><b className="block text-amber-900">Bawa / operan pasien aktif</b><span className="text-amber-700">Salin pasien dari hari sebelumnya ke tanggal hari ini pada tim yang dipilih.</span></span></label><div className="pt-2 border-t border-slate-100 flex gap-2"><button type="button" onClick={onClose} className="flex-1 min-h-11 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer">Batal</button><button type="submit" disabled={busy} className="flex-1 min-h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60">{busy ? 'Memproses...' : <><ArrowLeftRight className="w-4 h-4" />Masuk / Buat Tim</>}</button></div></form></div></div></div>;
 }
