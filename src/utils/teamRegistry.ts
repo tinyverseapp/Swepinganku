@@ -1,10 +1,11 @@
 import { DivisionTeam } from '../types';
 import { auth } from '../lib/firebase';
 
+const KEY = 'sweepinganku:joinedTeams';
 const LEGACY_KEY = 'sweepinganku:joinedTeams';
 
 function getKey(): string {
-  return `${LEGACY_KEY}:${auth.currentUser?.uid || 'anonymous'}`;
+  return `${KEY}:${auth.currentUser?.uid || 'anonymous'}`;
 }
 
 export function loadJoinedTeams(): DivisionTeam[] {
@@ -36,16 +37,18 @@ export function getJoinedDivisions(): string[] {
 }
 
 export function getSavedActiveTeam(): DivisionTeam | null {
-  const teams = loadJoinedTeams();
-  if (!teams.length) return null;
-  const raw = localStorage.getItem(`sweepinganku:activeTeam:${auth.currentUser?.uid || 'anonymous'}`);
-  if (raw) {
-    try {
+  try {
+    const raw = localStorage.getItem('sweepinganku:activeTeam');
+    if (raw) {
       const active = JSON.parse(raw);
-      if (active?.teamCode && active?.division) return active;
-    } catch {
-      // Fall through to the most recently joined team.
+      if (active?.teamCode && active?.division) {
+        const joined = loadJoinedTeams();
+        if (joined.some((team) => team.teamCode === active.teamCode)) return active;
+      }
     }
+  } catch {
+    // Fall through to the latest joined team.
   }
-  return teams[teams.length - 1];
+  const teams = loadJoinedTeams();
+  return teams.length ? teams[teams.length - 1] : null;
 }
