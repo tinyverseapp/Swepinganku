@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, type ReactNode, useEffect, useState } from 'react';
 import {
   GoogleAuthProvider,
   User,
@@ -13,7 +13,7 @@ import { LogIn, LogOut, Mail, LockKeyhole, ShieldCheck, Stethoscope } from 'luci
 import { auth } from '../lib/firebase';
 
 interface AuthGateProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 function getAuthErrorMessage(code?: string): string {
