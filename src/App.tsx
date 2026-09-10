@@ -32,6 +32,13 @@ import {
   formatIndonesianDate,
   isRemovedDoctor
 } from './utils/storage';
+import {
+  subscribeToPatients,
+  savePatientsBatch,
+  deletePatientFromFirestore,
+  upsertPatientToFirestore,
+} from './lib/firestoreService';
+import type { Unsubscribe } from 'firebase/firestore';
 
 // Component imports
 import { Topbar } from './components/Topbar';
@@ -133,12 +140,39 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // Load patients and team when date or division changes
+  // Load patients and team when date or division changes,
+  // with Firestore real-time sync if teamCode is available.
   useEffect(() => {
-    const loaded = loadPatients(date, division);
-    setPatients(loaded);
-    setActiveTeam(loadCurrentTeam(division));
+    const team = loadCurrentTeam(division);
+    setActiveTeam(team);
     setSelectedDpjpFilter('all');
+
+    // Seed from localStorage first for instant display
+    const local = loadPatients(date, division, team.teamCode);
+    setPatients(local);
+
+    // Subscribe to Firestore real-time updates for this team & date
+    let unsub: Unsubscribe | null = null;
+    if (team.teamCode) {
+      unsub = subscribeToPatients(team.teamCode, date, (firestorePatients) => {
+        if (firestorePatients.length > 0) {
+          // Merge: prefer Firestore data but keep local-only entries not yet synced
+          setPatients((prev) => {
+            const fsIds = new Set(firestorePatients.map((p) => p.id));
+            const localOnly = prev.filter((p) => !fsIds.has(p.id));
+            const merged = [...firestorePatients, ...localOnly];
+            // Persist merged result to localStorage as cache
+            savePatients(date, division, merged, team.teamCode);
+            return merged;
+          });
+        }
+      });
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, division]);
 
   // Save Koas name handler
@@ -163,18 +197,32 @@ export default function App() {
     }
 
     setPatients(updated);
-    savePatients(date, division, updated);
+    savePatients(date, division, updated, activeTeam.teamCode);
     setIsPatientModalOpen(false);
     setEditingPatient(null);
+
+    // Sync individual patient to Firestore
+    if (activeTeam.teamCode) {
+      upsertPatientToFirestore(
+        { ...patientData, updatedAt: new Date().toISOString() },
+        activeTeam.teamCode,
+        date
+      ).catch(() => {});
+    }
   };
 
   // Delete patient handler
   const handleConfirmDelete = (patient: Patient) => {
     const updated = patients.filter((p) => p.id !== patient.id);
     setPatients(updated);
-    savePatients(date, division, updated);
+    savePatients(date, division, updated, activeTeam.teamCode);
     setDeletingPatient(null);
     showToast(`Data ${patient.name} telah dihapus.`);
+
+    // Delete from Firestore
+    if (activeTeam.teamCode) {
+      deletePatientFromFirestore({ ...patient, teamCode: activeTeam.teamCode, date }).catch(() => {});
+    }
   };
 
   // Quick share individual patient to clipboard
@@ -195,8 +243,11 @@ export default function App() {
   const handleHandoverYesterday = () => {
     const result = handoverYesterdayPatients(date, division);
     if (result.addedCount > 0) {
-      const refreshed = loadPatients(date, division);
+      const refreshed = loadPatients(date, division, activeTeam.teamCode);
       setPatients(refreshed);
+      if (activeTeam.teamCode) {
+        savePatientsBatch(activeTeam.teamCode, date, refreshed).catch(() => {});
+      }
       showToast(
         `Berhasil mengoper ${result.addedCount} pasien dari hari kemarin!`
       );
@@ -240,7 +291,10 @@ export default function App() {
 
       const merged = [...patients, ...toAdd];
       setPatients(merged);
-      savePatients(date, division, merged);
+      savePatients(date, division, merged, activeTeam.teamCode);
+      if (activeTeam.teamCode) {
+        savePatientsBatch(activeTeam.teamCode, date, merged).catch(() => {});
+      }
       showToast(`Berhasil menyalin ${toAdd.length} pasien dari hari ${dayName}!`);
     } catch {
       showToast('Gagal memproses data salinan.');
