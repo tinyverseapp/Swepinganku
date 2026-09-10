@@ -23,9 +23,10 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedDivision(currentDivision || DIVISIONS[0] || '');
-      setTeamCodeInput(currentTeam.teamCode || getDefaultTeamCode(currentDivision || DIVISIONS[0] || ''));
-      setTeamNameInput(currentTeam.teamName || `Tim ${currentDivision || DIVISIONS[0] || ''}`);
+      const initialDivision = currentDivision || DIVISIONS[0] || '';
+      setSelectedDivision(initialDivision);
+      setTeamCodeInput(currentTeam.teamCode || getDefaultTeamCode(initialDivision));
+      setTeamNameInput(currentTeam.teamName || `Tim ${initialDivision}`);
       setMemberNameInput(koasName);
     }
   }, [isOpen, currentDivision, currentTeam, koasName]);
@@ -58,9 +59,8 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
       lastUpdated: new Date().toISOString(),
     };
 
-    // Riwayat divisi adalah milik akun yang sedang login.
     saveJoinedTeam(updatedTeam);
-    localStorage.setItem(`sweepinganku:activeTeam:${updatedTeam.teamCode}`, JSON.stringify(updatedTeam));
+    localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(updatedTeam));
     onSwitchTeam(updatedTeam, carryOver);
     onClose();
   };
@@ -96,7 +96,7 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
               <select value={selectedDivision} onChange={(e) => handleDivisionChange(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
                 {(DIVISIONS || []).map((division) => <option key={division} value={division}>{division}</option>)}
               </select>
-              <p className="text-[10px] text-slate-400 mt-1">Daftar divisi utama di sini hanya digunakan untuk memilih tim baru. Setelah bergabung, divisi tersebut tersimpan pada akun Anda.</p>
+              <p className="text-[10px] text-slate-400 mt-1">Pilih divisi dan PIN tim yang ingin Anda masuki. Setelah bergabung, divisi ini akan muncul pada daftar divisi akun Anda.</p>
             </div>
 
             <div>
