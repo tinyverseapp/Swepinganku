@@ -8,10 +8,9 @@ import {
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signOut,
   updateProfile,
 } from 'firebase/auth';
-import { LogIn, LogOut, Mail, LockKeyhole, ShieldCheck, Stethoscope, UserPlus, UserRound } from 'lucide-react';
+import { LogIn, Mail, LockKeyhole, ShieldCheck, Stethoscope, UserPlus, UserRound } from 'lucide-react';
 import { auth } from '../lib/firebase';
 
 interface AuthGateProps { children: ReactNode; }
@@ -87,10 +86,6 @@ export function AuthGate({ children }: AuthGateProps) {
     } finally { setBusy(false); }
   };
 
-  const handleLogout = async () => {
-    try { await signOut(auth); } catch { setError('Gagal keluar dari akun. Silakan coba lagi.'); }
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-slate-500">
@@ -134,5 +129,5 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  return <div className="relative">{children}<div className="fixed bottom-3 right-3 z-50 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 backdrop-blur px-2 py-1.5 shadow-lg max-w-[calc(100vw-1.5rem)]"><div className="hidden sm:block min-w-0 px-1"><div className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Login</div><div className="text-xs font-semibold text-slate-700 truncate max-w-44">{user.email || user.displayName || 'Akun Google'}</div></div><button type="button" onClick={handleLogout} title="Keluar" className="min-h-9 px-2.5 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 text-xs font-bold flex items-center gap-1.5"><LogOut className="w-3.5 h-3.5" />Keluar</button></div></div>;
+  return <div className="relative">{children}</div>;
 }
