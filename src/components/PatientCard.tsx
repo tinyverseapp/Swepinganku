@@ -1,6 +1,6 @@
 import { Patient } from '../types';
 import { isBedRoom, formatKamarOrBed } from '../data/constants';
-import { Edit2, Trash2, Stethoscope, Share2, AlertCircle } from 'lucide-react';
+import { Edit2, Trash2, Stethoscope, Share2, CalendarDays } from 'lucide-react';
 
 interface PatientCardProps {
   key?: string;
@@ -8,10 +8,11 @@ interface PatientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onQuickShare?: () => void;
+  onMove?: () => void;
   isCompact?: boolean;
 }
 
-export function PatientCard({ patient, onEdit, onDelete, onQuickShare, isCompact = false }: PatientCardProps) {
+export function PatientCard({ patient, onEdit, onDelete, onQuickShare, onMove, isCompact = false }: PatientCardProps) {
   const isMale = patient.jk === 'L';
   const isBed = isBedRoom(patient.room);
   const formattedLocation = formatKamarOrBed(patient.room, patient.kamar);
@@ -99,6 +100,19 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare, isCompact
         }`}
       >
         <div className="flex items-center gap-0.5 sm:gap-1">
+          {onMove && (
+            <button
+              type="button"
+              onClick={onMove}
+              className={`text-slate-500 hover:text-violet-600 hover:bg-violet-50 active:bg-violet-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
+                isCompact ? 'min-w-[28px] min-h-[28px] p-1.5' : 'min-w-[36px] min-h-[36px] p-2 sm:p-1.5'
+              }`}
+              title="Pindahkan ke hari lain"
+              aria-label={`Pindahkan ${patient.name} ke hari lain`}
+            >
+              <CalendarDays className={isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+            </button>
+          )}
           {onQuickShare && (
             <button
               type="button"
