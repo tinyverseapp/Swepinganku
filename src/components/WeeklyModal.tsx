@@ -1,349 +1,87 @@
-import { useState, useEffect } from 'react';
-import {
-  computeWeeklyRecap,
-  exportWeeklyCSV,
-  exportPatientsCSV,
-  getWeeklyPatientList,
-  parseDateSafely,
-  formatDateIso
-} from '../utils/storage';
+import { useEffect, useState } from 'react';
+import { X, Download, RefreshCw, CalendarRange, Users, Table, LayoutGrid, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { WeeklyRow, Patient } from '../types';
 import { formatKamarOrBed, normalizeRoomName, formatPatientNameWithHonorific, formatRoomDisplay } from '../data/constants';
-import {
-  X,
-  Download,
-  RefreshCw,
-  CalendarRange,
-  Users,
-  Table,
-  LayoutGrid,
-  FileSpreadsheet,
-  CheckCircle2
-} from 'lucide-react';
+import { exportWeeklyCSV, exportPatientsCSV, parseDateSafely, formatDateIso } from '../utils/storage';
+import { fetchPatientsForDateRange } from '../lib/firestoreService';
 
-interface WeeklyModalProps {
-  isOpen: boolean;
-  currentDate: string;
-  division: string;
-  teamCode?: string;
-  onClose: () => void;
+interface WeeklyModalProps { isOpen: boolean; currentDate: string; division: string; teamCode?: string; onClose: () => void; }
+
+function datesBetween(start: string, end: string): string[] {
+  const result: string[] = [];
+  const cursor = parseDateSafely(start);
+  const stop = parseDateSafely(end);
+  while (cursor <= stop && result.length < 60) { result.push(formatDateIso(cursor)); cursor.setDate(cursor.getDate() + 1); }
+  return result;
+}
+
+function rmKey(rm?: string | null): string {
+  const clean = String(rm || '').trim().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  return clean.replace(/^0+/, '') || clean;
+}
+
+function buildWeeklyData(patients: Patient[], startDate: string, endDate: string) {
+  const dates = datesBetween(startDate, endDate);
+  const map = new Map<string, WeeklyRow>();
+  const detailMap = new Map<string, Patient>();
+  for (const dt of dates) {
+    patients.filter((p) => p.date === dt && p.rm).forEach((p) => {
+      const key = rmKey(p.rm); if (!key) return;
+      const row = map.get(key) || { rm: p.rm, name: formatPatientNameWithHonorific(p.name, p.age, p.jk), jk: p.jk || '-', age: p.age || '-', dpjp: p.dpjp || '-', dx: p.dx || '', first: dt, last: dt, lastRoom: normalizeRoomName(p.room), lastKamar: p.kamar || '', days: {} };
+      row.name = formatPatientNameWithHonorific(p.name, p.age, p.jk); row.jk = p.jk || row.jk; row.age = p.age || row.age; row.dpjp = p.dpjp || row.dpjp; row.dx = p.dx || row.dx;
+      row.last = dt; row.lastRoom = normalizeRoomName(p.room); row.lastKamar = p.kamar || ''; row.days[dt] = `${normalizeRoomName(p.room)} (${formatKamarOrBed(p.room, p.kamar)})`;
+      map.set(key, row);
+      const existing = detailMap.get(key);
+      detailMap.set(key, existing ? { ...existing, ...p } : { ...p, date: dt });
+    });
+  }
+  return { rows: [...map.values()].sort((a, b) => a.name.localeCompare(b.name)), dates, detailedPatients: [...detailMap.values()].sort((a, b) => (a.room || '').localeCompare(b.room || '') || (a.name || '').localeCompare(b.name || '')) };
 }
 
 export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }: WeeklyModalProps) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [rows, setRows] = useState<WeeklyRow[]>([]);
-  const [dates, setDates] = useState<string[]>([]);
-  const [detailedPatients, setDetailedPatients] = useState<Patient[]>([]);
-  const [activeTab, setActiveTab] = useState<'table' | 'matrix'>('table');
-  const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState(''); const [endDate, setEndDate] = useState('');
+  const [rows, setRows] = useState<WeeklyRow[]>([]); const [dates, setDates] = useState<string[]>([]); const [detailedPatients, setDetailedPatients] = useState<Patient[]>([]);
+  const [activeTab, setActiveTab] = useState<'table' | 'matrix'>('table'); const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+
+  const loadData = async (start: string, end: string) => {
+    if (!teamCode) { setRows([]); setDetailedPatients([]); setDates(datesBetween(start, end)); return; }
+    setLoading(true); setError('');
+    try {
+      // Firestore is the source of truth for weekly recap; localStorage is deliberately not read here.
+      const patients = await fetchPatientsForDateRange(teamCode, start, end);
+      const result = buildWeeklyData(patients.filter((p) => !division || !p.division || p.division === division), start, end);
+      setRows(result.rows); setDates(result.dates); setDetailedPatients(result.detailedPatients);
+    } catch (err) { console.error('[Firestore] weekly recap:', err); setRows([]); setDetailedPatients([]); setError(err instanceof Error ? err.message : 'Gagal memuat rekap dari Firebase.'); }
+    finally { setLoading(false); }
+  };
 
   useEffect(() => {
     if (!currentDate) return;
-    const d = parseDateSafely(currentDate);
-    const day = d.getDay();
-    const diff = (day + 6) % 7;
-    const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff);
-    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+    const d = parseDateSafely(currentDate); const diff = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff); const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+    const s = formatDateIso(mon), e = formatDateIso(sun); setStartDate(s); setEndDate(e); if (isOpen) void loadData(s, e);
+  }, [currentDate, teamCode, division, isOpen]);
 
-    const s = formatDateIso(mon);
-    const e = formatDateIso(sun);
-    setStartDate(s);
-    setEndDate(e);
-
-    const res = computeWeeklyRecap(s, e, division, teamCode);
-    setRows(res.rows);
-    setDates(res.dates);
-
-    const detailed = getWeeklyPatientList(s, e, division, teamCode);
-    setDetailedPatients(detailed);
-  }, [currentDate, division, teamCode, isOpen]);
-
-  useEffect(() => {
-    if (!downloadSuccess) return;
-    const t = setTimeout(() => setDownloadSuccess(null), 3000);
-    return () => clearTimeout(t);
-  }, [downloadSuccess]);
-
+  useEffect(() => { if (!downloadSuccess) return; const t = setTimeout(() => setDownloadSuccess(null), 3000); return () => clearTimeout(t); }, [downloadSuccess]);
   if (!isOpen) return null;
 
-  const handleGenerate = () => {
-    if (!startDate || !endDate) return;
-    const res = computeWeeklyRecap(startDate, endDate, division, teamCode);
-    setRows(res.rows);
-    setDates(res.dates);
+  const handleGenerate = () => { if (startDate && endDate) void loadData(startDate, endDate); };
+  const handleDownloadPatientTableCSV = () => { if (!detailedPatients.length) return; exportPatientsCSV(detailedPatients, division, `${startDate}_${endDate}`, `Rekap-Pasien-${(division || 'Bedah').replace(/\s+/g, '-')}-${startDate}_${endDate}`); setDownloadSuccess('CSV Pasien berhasil diunduh (termasuk kolom Ruangan).'); };
+  const handleDownloadMatrixCSV = () => { if (!rows.length) return; exportWeeklyCSV(rows, dates, division, startDate, endDate); setDownloadSuccess('CSV Matriks Rekap berhasil diunduh.'); };
 
-    const detailed = getWeeklyPatientList(startDate, endDate, division, teamCode);
-    setDetailedPatients(detailed);
-  };
-
-  const handleDownloadPatientTableCSV = () => {
-    if (!detailedPatients.length) return;
-    const fileName = `Rekap-Pasien-${(division || 'Bedah').replace(/\s+/g, '-')}-${startDate}_${endDate}`;
-    exportPatientsCSV(
-      detailedPatients,
-      division,
-      `${startDate}_${endDate}`,
-      fileName
-    );
-    setDownloadSuccess('CSV Pasien berhasil diunduh (termasuk kolom Ruangan).');
-  };
-
-  const handleDownloadMatrixCSV = () => {
-    if (!rows.length) return;
-    exportWeeklyCSV(rows, dates, division, startDate, endDate);
-    setDownloadSuccess('CSV Matriks Rekap berhasil diunduh (Format Excel rapi)');
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
-              <CalendarRange className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 leading-tight">
-                Rekapitulasi &amp; Ekspor CSV Pasien
-              </h2>
-              <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1">
-                Divisi {division} · Format tabel terstruktur siap buka langsung di Microsoft Excel &amp; Spreadsheet
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Date Filters & Action Bar */}
-        <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 sm:gap-3 items-end shrink-0 bg-slate-50 p-3 rounded-xl border border-slate-200">
-          <div className="lg:col-span-3">
-            <label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Awal</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[38px]"
-            />
-          </div>
-          <div className="lg:col-span-3">
-            <label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Akhir</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[38px]"
-            />
-          </div>
-          <div className="lg:col-span-6 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleGenerate}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer min-h-[38px]"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Hitung Rekap</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadPatientTableCSV}
-              disabled={detailedPatients.length === 0}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer min-h-[38px] ${
-                detailedPatients.length === 0
-                  ? 'bg-slate-300 cursor-not-allowed text-slate-500'
-                  : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800'
-              }`}
-              title="Unduh file CSV berisi tabel tiap pasien sesuai data input web (No, Ruangan, DPJP, RM, Nama, Diagnosis)"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Export CSV (Tabel Pasien)</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadMatrixCSV}
-              disabled={rows.length === 0}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs border transition-colors shadow-2xs cursor-pointer min-h-[38px] ${
-                rows.length === 0
-                  ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-300'
-              }`}
-              title="Unduh file CSV matriks rekap per hari"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Export Matriks Hari</span>
-            </button>
-          </div>
-        </div>
-
-        {/* View mode toggle & helper banner */}
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setActiveTab('table')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === 'table'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Table className="w-3.5 h-3.5" />
-              <span>Tabel Pasien Unik ({detailedPatients.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('matrix')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === 'matrix'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Matriks Harian ({rows.length} Pasien)</span>
-            </button>
-          </div>
-
-          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-            <span>File CSV diformat dengan separator titik-koma (<b>;</b>) &amp; UTF-8 BOM untuk Microsoft Excel.</span>
-          </div>
-        </div>
-
-        {downloadSuccess && (
-          <div className="mt-2.5 py-2 px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{downloadSuccess}</span>
-          </div>
-        )}
-
-        {/* Content Table */}
-        <div className="mt-3 flex-1 overflow-auto border border-slate-200 rounded-xl bg-white">
-          {activeTab === 'table' ? (
-            detailedPatients.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-500">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-semibold text-slate-700">Tidak ada data pasien</p>
-                <p className="text-slate-400 mt-0.5">
-                  Belum ada sweeping pasien tersimpan pada rentang tanggal ini untuk {division}.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs border-collapse font-sans">
-                <thead>
-                  <tr className="bg-[#70ad47] text-white border-b border-[#5b8c39] sticky top-0 font-bold z-10 shadow-xs">
-                    <th className="p-2.5 border-r border-[#5b8c39] text-center w-12">No</th>
-                    <th className="p-2.5 border-r border-[#5b8c39] w-28">No. RM</th>
-                    <th className="p-2.5 border-r border-[#5b8c39] w-48">Nama</th>
-                    <th className="p-2.5 border-r border-[#5b8c39] text-center w-12">JK</th>
-                    <th className="p-2.5 border-r border-[#5b8c39] text-center w-14">Usia</th>
-                    <th className="p-2.5 border-r border-[#5b8c39]">Diagnosis</th>
-                    <th className="p-2.5 border-r border-[#5b8c39] w-56">DPJP</th>
-                    <th className="p-2.5 w-36">Ruangan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {detailedPatients.map((p, idx) => {
-                    const cleanName = (p.name || '')
-                      .replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '')
-                      .trim();
-                    const ageClean = (p.age || '').replace(/\s*(th|tahun|yr|year)s?/i, '').trim();
-                    const roomClean = formatRoomDisplay(p.room, p.kamar);
-                    return (
-                      <tr key={`${p.date}_${p.rm}_${p.id || idx}`} className="hover:bg-emerald-50/40 transition-colors border-b border-slate-200">
-                        <td className="p-2.5 text-center font-semibold text-slate-700 border-r border-slate-200">{idx + 1}</td>
-                        <td className="p-2.5 font-mono font-medium text-slate-800 whitespace-nowrap border-r border-slate-200">{p.rm}</td>
-                        <td className="p-2.5 font-medium text-slate-900 whitespace-nowrap border-r border-slate-200">{cleanName || p.name}</td>
-                        <td className="p-2.5 text-center font-medium text-slate-800 border-r border-slate-200">{p.jk}</td>
-                        <td className="p-2.5 text-center text-slate-800 border-r border-slate-200">{ageClean || p.age || '-'}</td>
-                        <td className="p-2.5 text-slate-800 border-r border-slate-200">{p.dx || '-'}</td>
-                        <td className="p-2.5 text-slate-800 whitespace-nowrap font-medium border-r border-slate-200">{p.dpjp}</td>
-                        <td className="p-2.5 text-slate-800 whitespace-nowrap font-medium">{roomClean}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )
-          ) : (
-            rows.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-500">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-semibold text-slate-700">Tidak ada riwayat pasien</p>
-                <p className="text-slate-400 mt-0.5">
-                  Belum ada sweeping tersimpan pada rentang tanggal ini untuk {division}.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 sticky top-0 font-bold z-10">
-                    <th className="p-2.5">No</th>
-                    <th className="p-2.5">No. RM</th>
-                    <th className="p-2.5">Nama Pasien</th>
-                    <th className="p-2.5">JK</th>
-                    <th className="p-2.5">Usia</th>
-                    <th className="p-2.5">DPJP</th>
-                    <th className="p-2.5">Ruangan Terakhir</th>
-                    <th className="p-2.5">Diagnosis</th>
-                    {(dates || []).map((dt) => {
-                      const d = parseDateSafely(dt);
-                      let dayLabel = dt;
-                      try {
-                        dayLabel = d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' });
-                      } catch {
-                        dayLabel = dt;
-                      }
-                      return (
-                        <th key={dt} className="p-2.5 font-bold text-center border-l border-slate-200 whitespace-nowrap">
-                          {dayLabel}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((row, idx) => (
-                    <tr key={row.rm} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-2.5 font-semibold text-slate-500">{idx + 1}</td>
-                      <td className="p-2.5 font-mono font-semibold text-blue-700">{row.rm}</td>
-                      <td className="p-2.5 font-bold text-slate-900 whitespace-nowrap">{row.name}</td>
-                      <td className="p-2.5">{row.jk}</td>
-                      <td className="p-2.5 whitespace-nowrap">{row.age}</td>
-                      <td className="p-2.5 text-slate-700 whitespace-nowrap">{row.dpjp}</td>
-                      <td className="p-2.5 font-medium whitespace-nowrap">
-                        {row.lastRoom} {row.lastKamar ? `/ ${formatKamarOrBed(row.lastRoom, row.lastKamar)}` : ''}
-                      </td>
-                      <td className="p-2.5 max-w-xs truncate text-slate-600" title={row.dx}>
-                        {row.dx}
-                      </td>
-                      {(dates || []).map((dt) => (
-                        <td key={dt} className="p-2.5 text-center font-mono text-[11px] border-l border-slate-100 whitespace-nowrap">
-                          {row.days[dt] ? (
-                            <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                              {row.days[dt]}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">-</span>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          )}
-        </div>
+  return <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div className="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
+      <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 shrink-0"><div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><CalendarRange className="w-5 h-5" /></div><div><h2 className="text-base sm:text-lg font-extrabold text-slate-900">Rekapitulasi &amp; Ekspor CSV Pasien</h2><p className="text-[11px] text-slate-500">Divisi {division} · sumber data Firebase</p></div></div><button type="button" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg min-h-9 min-w-9"><X className="w-5 h-5" /></button></div>
+      <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-end bg-slate-50 p-3 rounded-xl border border-slate-200 shrink-0">
+        <div className="lg:col-span-3"><label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Awal</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs min-h-10" /></div>
+        <div className="lg:col-span-3"><label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Akhir</label><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs min-h-10" /></div>
+        <div className="lg:col-span-6 flex flex-wrap gap-2"><button type="button" onClick={handleGenerate} disabled={loading} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs min-h-10 disabled:opacity-60"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />{loading ? 'Memuat Firebase...' : 'Hitung Rekap'}</button><button type="button" onClick={handleDownloadPatientTableCSV} disabled={!detailedPatients.length || loading} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs min-h-10 disabled:bg-slate-300"><FileSpreadsheet className="w-3.5 h-3.5" />Export CSV Pasien</button><button type="button" onClick={handleDownloadMatrixCSV} disabled={!rows.length || loading} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-300 bg-white text-emerald-800 font-bold text-xs min-h-10 disabled:text-slate-400"><Download className="w-3.5 h-3.5" />Export Matriks</button></div>
+      </div>
+      <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0"><div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold"><button type="button" onClick={() => setActiveTab('table')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'table' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'}`}><Table className="w-3.5 h-3.5 inline mr-1" />Tabel Pasien Unik ({detailedPatients.length})</button><button type="button" onClick={() => setActiveTab('matrix')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'matrix' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'}`}><LayoutGrid className="w-3.5 h-3.5 inline mr-1" />Matriks Harian ({rows.length})</button></div><span className="text-[11px] text-slate-500">Data diambil langsung dari Firestore</span></div>
+      {downloadSuccess && <div className="mt-2 py-2 px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />{downloadSuccess}</div>}
+      {error && <div className="mt-2 py-2 px-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">{error}</div>}
+      <div className="mt-3 flex-1 overflow-auto border border-slate-200 rounded-xl bg-white">
+        {loading ? <div className="p-12 text-center text-xs text-slate-500"><RefreshCw className="w-7 h-7 animate-spin mx-auto mb-2" />Memuat data rekap dari Firebase...</div> : activeTab === 'table' ? (!detailedPatients.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada data pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-[#70ad47] text-white sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">Diagnosis</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan</th></tr></thead><tbody>{detailedPatients.map((p, i) => <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono">{p.rm}</td><td className="p-2.5 font-medium">{p.name}</td><td className="p-2.5">{p.jk || '-'}</td><td className="p-2.5">{p.age || '-'}</td><td className="p-2.5">{p.dx || '-'}</td><td className="p-2.5">{p.dpjp || '-'}</td><td className="p-2.5">{formatRoomDisplay(p.room, p.kamar)}</td></tr>)}</tbody></table>) : (!rows.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada riwayat pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-slate-100 text-slate-700 sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan Terakhir</th><th className="p-2.5">Diagnosis</th>{dates.map((dt) => <th key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{parseDateSafely(dt).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' })}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={r.rm} className="border-b hover:bg-slate-50"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono font-semibold">{r.rm}</td><td className="p-2.5 font-bold whitespace-nowrap">{r.name}</td><td className="p-2.5">{r.jk}</td><td className="p-2.5">{r.age}</td><td className="p-2.5 whitespace-nowrap">{r.dpjp}</td><td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td><td className="p-2.5">{r.dx}</td>{dates.map((dt) => <td key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{r.days[dt] || <span className="text-slate-300">-</span>}</td>)}</tr>)}</tbody></table>)}
       </div>
     </div>
-  );
+  </div>;
 }
-
