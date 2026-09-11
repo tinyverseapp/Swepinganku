@@ -72,12 +72,76 @@
         }
       },
       "required": ["id", "name", "jk", "rm", "room", "dpjp", "date", "division"]
+    },
+    "DivisionTeam": {
+      "title": "DivisionTeam",
+      "description": "Informasi tim divisi koas dan rentang tanggal pekan dinas",
+      "type": "object",
+      "properties": {
+        "teamCode": {
+          "type": "string",
+          "description": "Kode PIN tim divisi",
+          "maxLength": 50
+        },
+        "division": {
+          "type": "string",
+          "description": "Nama divisi bedah",
+          "maxLength": 100
+        },
+        "teamName": {
+          "type": "string",
+          "description": "Nama kelompok tim",
+          "maxLength": 200
+        },
+        "weekStart": {
+          "type": "string",
+          "description": "Tanggal awal pekan format YYYY-MM-DD",
+          "maxLength": 10
+        },
+        "weekEnd": {
+          "type": "string",
+          "description": "Tanggal akhir pekan format YYYY-MM-DD",
+          "maxLength": 10
+        }
+      },
+      "required": ["teamCode", "division", "teamName", "weekStart", "weekEnd"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Anggota koas yang terdaftar dalam tim divisi",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "ID unik pengguna Firebase Auth",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama lengkap koas",
+          "maxLength": 200
+        },
+        "email": {
+          "type": "string",
+          "description": "Alamat email koas",
+          "maxLength": 320
+        }
+      },
+      "required": ["uid", "name", "email"]
     }
   },
   "firestore": {
     "/sweepinganku/{patientId}": {
       "schema": "#/entities/SweepingPatient",
       "description": "Koleksi sweepinganku berisi data pasien yang disinkronkan antar perangkat secara real-time"
+    },
+    "/teams/{teamCode}": {
+      "schema": "#/entities/DivisionTeam",
+      "description": "Informasi kelompok tim divisi koas dan rentang pekan aktif"
+    },
+    "/teamMembers/{teamCode}/members/{uid}": {
+      "schema": "#/entities/TeamMember",
+      "description": "Daftar kehadiran dan anggota aktif per tim divisi"
     }
   }
 }

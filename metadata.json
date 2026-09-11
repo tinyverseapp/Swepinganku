@@ -1,5 +1,5 @@
 {
-  "name": "Sweepinganku",
+  "name": "Swepinganku",
   "description": "Aplikasi manajemen sweeping harian pasien bedah koas, rekap mingguan, dan generator laporan WhatsApp.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

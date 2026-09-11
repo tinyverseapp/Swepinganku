@@ -103,8 +103,8 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden">
             <div className="px-6 sm:px-8 pt-8 pb-5 text-center">
               <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-200"><Stethoscope className="w-7 h-7" /></div>
-              <h1 className="mt-5 text-2xl font-extrabold text-slate-900">Sweepinganku</h1>
-              <p className="mt-1.5 text-sm text-slate-500">{isRegister ? 'Buat akun untuk mulai menggunakan Sweepinganku.' : 'Silakan login untuk mengakses data sweeping.'}</p>
+              <h1 className="mt-5 text-2xl font-extrabold text-slate-900">Swepinganku</h1>
+              <p className="mt-1.5 text-sm text-slate-500">{isRegister ? 'Buat akun untuk mulai menggunakan Swepinganku.' : 'Silakan login untuk mengakses data sweeping.'}</p>
             </div>
             <div className="px-6 sm:px-8 pb-8">
               <div className="grid grid-cols-2 p-1 mb-5 rounded-xl bg-slate-100 border border-slate-200">
