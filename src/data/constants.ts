@@ -12,7 +12,8 @@ export const DIVISIONS: string[] = [
 ];
 
 /**
- * Master data dokter konsulen (DPJP) per divisi stase bedah
+ * Master data dokter konsulen (DPJP) per divisi stase bedah.
+ * Nama di sini menjadi base data yang muncul pada pilihan DPJP.
  */
 export const DIVISION_CONSULTANTS: Record<string, string[]> = {
   'Bedah Anak': [
@@ -40,9 +41,20 @@ export const DIVISION_CONSULTANTS: Record<string, string[]> = {
     'dr. Ery Irawan, Sp.BTKV, M.Ked.Klin.',
     'dr. David Hermawan Christian, Sp.BTKV, M.Ked.Klin.(K)'
   ],
-  'Bedah Digestif & Umum': [],
-  'Ortopedi': [],
-  'Bedah Saraf': []
+  'Bedah Digestif & Umum': [
+    'dr. Ahmad T. Nasution, Sp.B.KBD',
+    'dr. Bambang Suprapto, Sp.B(K)BD'
+  ],
+  'Ortopedi': [
+    'dr. Yasser Ridwan, Sp.OT, K-Spine, FICS',
+    'dr. Hendri Purnama, Sp.OT, K-Hip&Knee',
+    'dr. Fahroni C. Winata, M.Kes, Sp.OT, K-Sport, FICS, AIFO-K',
+    'dr. Achmad Fachrizal, Sp.OT'
+  ],
+  'Bedah Saraf': [
+    'dr. Dini Heryani, Sp.BS',
+    'dr. Taufiq Fatchur Rochman, Sp.BS'
+  ]
 };
 
 /**
@@ -116,22 +128,13 @@ export function formatKamarOrBed(roomName?: string, kamarVal?: string): string {
   }
   const clean = kamarVal.trim();
   if (isBed) {
-    if (/^bed\s*/i.test(clean)) {
-      return clean.replace(/^bed\s*/i, 'Bed ');
-    }
+    if (/^bed\s*/i.test(clean)) return clean.replace(/^bed\s*/i, 'Bed ');
     return `Bed ${clean}`;
   }
-
-  // Ruangan selain 4 ruangan khusus (misal: Seroja, Teratai, Dahlia, dll):
-  // Format menjadi "K2003", "K201", dsb.
   let nonBed = clean;
-  if (/^kamar\s*/i.test(nonBed)) {
-    nonBed = nonBed.replace(/^kamar\s*/i, '');
-  } else if (/^k[\.\s]+/i.test(nonBed)) {
-    nonBed = nonBed.replace(/^k[\.\s]+/i, '');
-  } else if (/^k(?=[0-9])/i.test(nonBed)) {
-    nonBed = nonBed.replace(/^k/i, '');
-  }
+  if (/^kamar\s*/i.test(nonBed)) nonBed = nonBed.replace(/^kamar\s*/i, '');
+  else if (/^k[\.\s]+/i.test(nonBed)) nonBed = nonBed.replace(/^k[\.\s]+/i, '');
+  else if (/^k(?=[0-9])/i.test(nonBed)) nonBed = nonBed.replace(/^k/i, '');
   return `K${nonBed}`;
 }
 
@@ -139,171 +142,68 @@ export function parseAgeInYears(ageStr?: string): number | null {
   if (!ageStr) return null;
   const s = ageStr.toLowerCase().trim();
   if (!s) return null;
-
-  // Check months (bln, bulan, month, m)
   if (/(bln|bulan|month)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) {
     const match = s.match(/(\d+(?:[.,]\d+)?)/);
-    if (match) {
-      return parseFloat(match[1].replace(',', '.')) / 12;
-    }
-    return 0;
+    return match ? parseFloat(match[1].replace(',', '.')) / 12 : 0;
   }
-
-  // Check days (hr, hari, day, d)
   if (/(hr|hari|day)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) {
     const match = s.match(/(\d+(?:[.,]\d+)?)/);
-    if (match) {
-      return parseFloat(match[1].replace(',', '.')) / 365;
-    }
-    return 0;
+    return match ? parseFloat(match[1].replace(',', '.')) / 365 : 0;
   }
-
-  // Check weeks (mgg, minggu, wk, week)
   if (/(mgg|minggu|wk|week)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) {
     const match = s.match(/(\d+(?:[.,]\d+)?)/);
-    if (match) {
-      return parseFloat(match[1].replace(',', '.')) / 52;
-    }
-    return 0;
+    return match ? parseFloat(match[1].replace(',', '.')) / 52 : 0;
   }
-
-  // Years or pure numbers (e.g. "17 th", "45", "18 tahun", "2th", "0.5 th")
   const match = s.match(/(\d+(?:[.,]\d+)?)/);
-  if (match) {
-    return parseFloat(match[1].replace(',', '.'));
-  }
-
-  return null;
+  return match ? parseFloat(match[1].replace(',', '.')) : null;
 }
 
 export function getPatientHonorific(ageStr?: string, jk?: 'L' | 'P' | string): 'An.' | 'Tn.' | 'Ny.' {
   const ageYears = parseAgeInYears(ageStr);
-  if (ageYears !== null) {
-    if (ageYears < 18) {
-      return 'An.';
-    } else {
-      return jk === 'P' ? 'Ny.' : 'Tn.';
-    }
-  }
-  // Default if age not parsed yet
+  if (ageYears !== null) return ageYears < 18 ? 'An.' : jk === 'P' ? 'Ny.' : 'Tn.';
   return jk === 'P' ? 'Ny.' : 'Tn.';
 }
 
-export function formatPatientNameWithHonorific(
-  name?: string,
-  ageStr?: string,
-  jk?: 'L' | 'P' | string
-): string {
+export function formatPatientNameWithHonorific(name?: string, ageStr?: string, jk?: 'L' | 'P' | string): string {
   if (!name || !name.trim()) return '';
   const trimmed = name.trim();
   const prefix = getPatientHonorific(ageStr, jk);
-
   let cleanName = trimmed;
-  // Handle By. Ny. ... or Bayi Ny. ...
   if (/^(by\.?\s*ny\.?|bayi\s*ny\.?)\s+/i.test(cleanName)) {
     cleanName = cleanName.replace(/^(by\.?\s*|bayi\s*)/i, '').trim();
-    if (prefix !== 'An.') {
-      cleanName = cleanName.replace(/^(ny\.?|nyonya)\s+/i, '').trim();
-    }
+    if (prefix !== 'An.') cleanName = cleanName.replace(/^(ny\.?|nyonya)\s+/i, '').trim();
   } else {
-    // Strip existing prefixes like Tn., Ny., An., By., Nn., Sdr., Sdri., Tuan, Nyonya, Anak, Bayi
-    cleanName = cleanName.replace(
-      /^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i,
-      ''
-    ).trim();
+    cleanName = cleanName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
   }
-
   if (!cleanName) return `${prefix} ${trimmed}`;
   return `${prefix} ${cleanName}`;
 }
 
 export const SAMPLE_PATIENTS: Patient[] = [
   {
-    id: 'sample-p1',
-    dpjp: 'dr. Andi Mohammad Ardan, SpBP-RE',
-    room: 'Seroja',
-    kamar: 'K201',
-    name: 'Tn. Budi Santoso',
-    jk: 'L',
-    age: '34 th',
-    rm: '00-88-21-45',
-    dx: 'Vulnus Laceratum regio Facialis post debridement + heacting primer H+1, luka terawat kering',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p1', dpjp: 'dr. Andi Mohammad Ardan, SpBP-RE', room: 'Seroja', kamar: 'K201', name: 'Tn. Budi Santoso', jk: 'L', age: '34 th', rm: '00-88-21-45', dx: 'Vulnus Laceratum regio Facialis post debridement + heacting primer H+1, luka terawat kering', updatedAt: new Date().toISOString()
   },
   {
-    id: 'sample-p2',
-    dpjp: 'dr. Yudhy Arius, Sp.BP-RE',
-    room: 'IGD',
-    kamar: 'Bed 4',
-    name: 'Ny. Siti Rahayu',
-    jk: 'P',
-    age: '29 th',
-    rm: '00-89-10-33',
-    dx: 'Combustio Grade IIA 15% regio antebrachii bilateral, kassa tulle terpasang',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p2', dpjp: 'dr. Yudhy Arius, Sp.BP-RE', room: 'IGD', kamar: 'Bed 4', name: 'Ny. Siti Rahayu', jk: 'P', age: '29 th', rm: '00-89-10-33', dx: 'Combustio Grade IIA 15% regio antebrachii bilateral, kassa tulle terpasang', updatedAt: new Date().toISOString()
   },
   {
-    id: 'sample-p3',
-    dpjp: 'dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes',
-    room: 'Seroja',
-    kamar: 'K205',
-    name: 'Ny. Endang Kusuma',
-    jk: 'P',
-    age: '48 th',
-    rm: '00-90-12-09',
-    dx: 'Post MRM sinistra H+2 ec Ca Mammae T2N1M0, drain aktif 30 cc serosanguineous',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p3', dpjp: 'dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes', room: 'Seroja', kamar: 'K205', name: 'Ny. Endang Kusuma', jk: 'P', age: '48 th', rm: '00-90-12-09', dx: 'Post MRM sinistra H+2 ec Ca Mammae T2N1M0, drain aktif 30 cc serosanguineous', updatedAt: new Date().toISOString()
   },
   {
-    id: 'sample-p4',
-    dpjp: 'dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)',
-    room: 'ICU',
-    kamar: 'Bed 2',
-    name: 'Tn. Hendro Wijaya',
-    jk: 'L',
-    age: '58 th',
-    rm: '00-87-99-12',
-    dx: 'Post Tiroidektomi Total H+1 ec Susp. Ca Tiroid, drain 10 cc serosa, sesak (-), stridor (-)',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p4', dpjp: 'dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)', room: 'ICU', kamar: 'Bed 2', name: 'Tn. Hendro Wijaya', jk: 'L', age: '58 th', rm: '00-87-99-12', dx: 'Post Tiroidektomi Total H+1 ec Susp. Ca Tiroid, drain 10 cc serosa, sesak (-), stridor (-)', updatedAt: new Date().toISOString()
   },
   {
-    id: 'sample-p5',
-    dpjp: 'dr. Santi Rini., Sp.BA., Subsp.DA(K)',
-    room: 'NICU',
-    kamar: 'Bed 1',
-    name: 'An. Ny. Rahmawati',
-    jk: 'L',
-    age: '3 hr',
-    rm: '00-91-05-22',
-    dx: 'Post Repair Atresia Ani H+1, TPN terpasang, saturasi 98% O2 nasal kanul',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p5', dpjp: 'dr. Santi Rini., Sp.BA., Subsp.DA(K)', room: 'NICU', kamar: 'Bed 1', name: 'An. Ny. Rahmawati', jk: 'L', age: '3 hr', rm: '00-91-05-22', dx: 'Post Repair Atresia Ani H+1, TPN terpasang, saturasi 98% O2 nasal kanul', updatedAt: new Date().toISOString()
   },
   {
-    id: 'sample-p6',
-    dpjp: 'dr. Fahad Ahmed Shah Khaisama T., Sp.BA',
-    room: 'PICU',
-    kamar: 'Bed 3',
-    name: 'An. Kevin Pratama',
-    jk: 'L',
-    age: '2 th',
-    rm: '00-92-44-11',
-    dx: 'Post Laparotomi Reduksi Invaginasi H+1, NGT alir cairan kehijauan minimal, luka operasi tenang',
-    updatedAt: new Date().toISOString()
+    id: 'sample-p6', dpjp: 'dr. Fahad Ahmed Shah Khaisama T., Sp.BA', room: 'PICU', kamar: 'Bed 3', name: 'An. Kevin Pratama', jk: 'L', age: '2 th', rm: '00-92-44-11', dx: 'Post Laparotomi Reduksi Invaginasi H+1, NGT alir cairan kehijauan minimal, luka operasi tenang', updatedAt: new Date().toISOString()
   }
 ];
 
 export const DEFAULT_TEAM_CODES: Record<string, string> = {
-  'Bedah Digestif & Umum': 'DIGESTIF',
-  'Bedah Anak': 'BEDAH-ANAK',
-  'Urologi': 'UROLOGI',
-  'Ortopedi': 'ORTOPEDI',
-  'Bedah Saraf': 'BEDAH-SARAF',
-  'BTKV': 'BTKV',
-  'Bedah Plastik': 'BEDAH-PLASTIK',
-  'Bedah Onkologi': 'ONKOLOGI'
+  'Bedah Digestif & Umum': 'DIGESTIF', 'Bedah Anak': 'BEDAH-ANAK', 'Urologi': 'UROLOGI', 'Ortopedi': 'ORTOPEDI', 'Bedah Saraf': 'BEDAH-SARAF', 'BTKV': 'BTKV', 'Bedah Plastik': 'BEDAH-PLASTIK', 'Bedah Onkologi': 'ONKOLOGI'
 };
 
 export function getDefaultTeamCode(division: string): string {
   return DEFAULT_TEAM_CODES[division] || division.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
 }
-
