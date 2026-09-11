@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  deleteDoc,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -42,6 +43,12 @@ export async function updateTeamMemberPresence(teamCode: string, uid: string, na
     email: email.trim(),
     lastSeenAt: serverTimestamp(),
   }, { merge: true });
+}
+
+/** Remove the current authenticated user's membership from a team. */
+export async function leaveTeam(teamCode: string, uid: string): Promise<void> {
+  if (!teamCode || !uid) throw new Error('Data akun atau tim tidak valid.');
+  await deleteDoc(memberRef(teamCode, uid));
 }
 
 export function subscribeToTeamMembers(
