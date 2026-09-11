@@ -64,6 +64,8 @@ export function getSavedActiveTeam(): DivisionTeam | null {
         const joined = loadJoinedTeams();
         if (joined.some((team) => team.teamCode === active.teamCode)) return active;
       }
+      // An explicit empty active team means the account intentionally left its last team.
+      if (active && !active.teamCode) return null;
     }
   } catch {
     // Fall through to the latest joined team.
@@ -71,7 +73,8 @@ export function getSavedActiveTeam(): DivisionTeam | null {
   const teams = loadJoinedTeams();
   if (teams.length) return teams[teams.length - 1];
   
-  // Default to Bedah Digestif team so users can immediately use the app with the Excel data
+  // Default to Bedah Digestif team so users can immediately use the app with the Excel data.
+  // This remains only for accounts that have never explicitly left/cleared a team.
   saveJoinedTeam(DEFAULT_DIGESTIF_TEAM);
   return DEFAULT_DIGESTIF_TEAM;
 }
