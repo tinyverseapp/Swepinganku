@@ -1,6 +1,6 @@
 import { Patient } from '../types';
 import { isBedRoom, formatKamarOrBed } from '../data/constants';
-import { Edit2, Trash2, Stethoscope, Share2, CalendarDays } from 'lucide-react';
+import { Edit2, Trash2, Stethoscope, Share2, CalendarDays, Building2 } from 'lucide-react';
 
 interface PatientCardProps {
   key?: string;
@@ -57,6 +57,7 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare, onMove, i
             </div>
           </div>
 
+          {/* Kamar / bed */}
           <span
             className={`shrink-0 font-bold border ${
               isCompact ? 'text-[10.5px] px-2 py-0.5 rounded-md' : 'text-xs px-2.5 py-1 rounded-lg'
@@ -69,6 +70,18 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare, onMove, i
           >
             {formattedLocation}
           </span>
+        </div>
+
+        {/* Ruangan */}
+        <div
+          className={`flex items-center gap-1.5 text-slate-700 font-semibold bg-blue-50 border border-blue-100 rounded-lg ${
+            isCompact ? 'mt-1.5 px-2 py-1 text-[10.5px]' : 'mt-2 px-2.5 py-1.5 text-xs'
+          }`}
+          title={`Ruangan: ${patient.room || '-'}`}
+        >
+          <Building2 className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-600 shrink-0`} />
+          <span className="text-slate-500">Ruang:</span>
+          <span className="truncate text-blue-800">{patient.room || '-'}</span>
         </div>
 
         {/* DPJP & Diagnosis */}
