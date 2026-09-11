@@ -2,15 +2,18 @@ import { DivisionTeam } from '../types';
 import { auth } from '../lib/firebase';
 
 const KEY = 'sweepinganku:joinedTeams';
-const LEGACY_KEY = 'sweepinganku:joinedTeams';
 
 function getKey(): string {
   return `${KEY}:${auth.currentUser?.uid || 'anonymous'}`;
 }
 
+/**
+ * Local cache only. Firebase team membership remains the source of truth.
+ * An empty list is a valid state: it means the account has not joined a team.
+ */
 export function loadJoinedTeams(): DivisionTeam[] {
   try {
-    const raw = localStorage.getItem(getKey()) || (auth.currentUser ? null : localStorage.getItem(LEGACY_KEY));
+    const raw = localStorage.getItem(getKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -32,7 +35,7 @@ export function saveJoinedTeam(team: DivisionTeam): void {
   }
 }
 
-/** Remove a team from this account's joined-team list. */
+/** Remove a team from this account's local membership cache. */
 export function removeJoinedTeam(teamCode: string): DivisionTeam[] {
   try {
     const normalizedCode = teamCode.trim().toUpperCase();
@@ -48,13 +51,10 @@ export function getJoinedDivisions(): string[] {
   return Array.from(new Set(loadJoinedTeams().map((team) => team.division).filter(Boolean)));
 }
 
-export const DEFAULT_DIGESTIF_TEAM: DivisionTeam = {
-  teamCode: 'DIGESTIF',
-  division: 'Bedah Digestif & Umum',
-  teamName: 'Tim Bedah Digestif',
-  members: ['dr. Muda / Koas Bedah']
-};
-
+/**
+ * Returns the explicitly selected/joined team, or null when the account has
+ * no active team. There is intentionally NO legacy/default team fallback.
+ */
 export function getSavedActiveTeam(): DivisionTeam | null {
   try {
     const raw = localStorage.getItem('sweepinganku:activeTeam');
@@ -62,19 +62,17 @@ export function getSavedActiveTeam(): DivisionTeam | null {
       const active = JSON.parse(raw);
       if (active?.teamCode && active?.division) {
         const joined = loadJoinedTeams();
-        if (joined.some((team) => team.teamCode === active.teamCode)) return active;
+        if (joined.some((team) => team.teamCode.trim().toUpperCase() === String(active.teamCode).trim().toUpperCase())) {
+          return active;
+        }
       }
-      // An explicit empty active team means the account intentionally left its last team.
+      // An explicit empty active team means the account intentionally has no team.
       if (active && !active.teamCode) return null;
     }
   } catch {
-    // Fall through to the latest joined team.
+    // Fall through to the joined-team cache.
   }
+
   const teams = loadJoinedTeams();
-  if (teams.length) return teams[teams.length - 1];
-  
-  // Default to Bedah Digestif team so users can immediately use the app with the Excel data.
-  // This remains only for accounts that have never explicitly left/cleared a team.
-  saveJoinedTeam(DEFAULT_DIGESTIF_TEAM);
-  return DEFAULT_DIGESTIF_TEAM;
+  return teams.length ? teams[teams.length - 1] : null;
 }
