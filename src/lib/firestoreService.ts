@@ -109,6 +109,33 @@ export function subscribeToPatients(
   );
 }
 
+/** Subscribe to real-time changes for all patients of a team across all dates. */
+export function subscribeToTeamAllPatients(
+  teamCode: string,
+  callback: (patients: Patient[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  if (!teamCode) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, COLLECTION),
+    where('teamCode', '==', teamCode)
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => d.data() as Patient));
+    },
+    (err) => {
+      console.error('[Firestore] subscribeToTeamAllPatients error:', err);
+      onError?.(err);
+    }
+  );
+}
+
 /** Delete one patient from Firestore. */
 export async function deletePatientFromFirestore(
   patient: Patient & { teamCode?: string; date?: string }

@@ -3,6 +3,7 @@ import { Stethoscope, FileText, LayoutGrid, Settings, LogOut, UserRound, X, Edit
 import { PageMode, DivisionTeam } from '../types';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged, signOut, updateProfile, User } from 'firebase/auth';
+import { useDivisionColors } from '../utils/divisionColors';
 
 interface TopbarProps {
   koasName: string;
@@ -16,7 +17,7 @@ interface TopbarProps {
   onOpenSettings?: () => void;
 }
 
-export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onPageModeChange, onOpenSettings }: TopbarProps) {
+export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onPageModeChange, onOpenSettings, activeTeam }: TopbarProps) {
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -25,6 +26,7 @@ export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onP
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
+  const { activeTheme } = useDivisionColors(activeTeam?.division);
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
   useEffect(() => {
@@ -68,8 +70,29 @@ export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onP
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0"><Stethoscope className="w-5 h-5" /></div>
-          <div className="min-w-0"><div className="font-extrabold text-base sm:text-lg text-slate-900 leading-tight">Swepinganku</div><div className="text-[10px] sm:text-[11px] font-medium text-slate-500 truncate">Surgical Sweeping &amp; WA Report</div></div>
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+            <Stethoscope className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base sm:text-lg text-slate-900 leading-tight">Swepinganku</span>
+              {activeTeam?.division && (
+                <span className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors ${activeTheme.badge}`}>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: activeTheme.hex }} />
+                  <span>{activeTeam.division}</span>
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] sm:text-[11px] font-medium text-slate-500 truncate flex items-center gap-1.5">
+              <span>Surgical Sweeping &amp; WA Report</span>
+              {activeTeam?.division && (
+                <span className={`sm:hidden inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold border ${activeTheme.badge}`}>
+                  <span className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: activeTheme.hex }} />
+                  <span>{activeTeam.division}</span>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           {onPageModeChange && <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold flex-1 sm:flex-initial">

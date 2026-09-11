@@ -36,6 +36,13 @@ export function getJoinedDivisions(): string[] {
   return Array.from(new Set(loadJoinedTeams().map((team) => team.division).filter(Boolean)));
 }
 
+export const DEFAULT_DIGESTIF_TEAM: DivisionTeam = {
+  teamCode: 'DIGESTIF',
+  division: 'Bedah Digestif & Umum',
+  teamName: 'Tim Bedah Digestif',
+  members: ['dr. Muda / Koas Bedah']
+};
+
 export function getSavedActiveTeam(): DivisionTeam | null {
   try {
     const raw = localStorage.getItem('sweepinganku:activeTeam');
@@ -50,5 +57,9 @@ export function getSavedActiveTeam(): DivisionTeam | null {
     // Fall through to the latest joined team.
   }
   const teams = loadJoinedTeams();
-  return teams.length ? teams[teams.length - 1] : null;
+  if (teams.length) return teams[teams.length - 1];
+  
+  // Default to Bedah Digestif team so users can immediately use the app with the Excel data
+  saveJoinedTeam(DEFAULT_DIGESTIF_TEAM);
+  return DEFAULT_DIGESTIF_TEAM;
 }

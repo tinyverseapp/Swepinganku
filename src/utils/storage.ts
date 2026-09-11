@@ -8,7 +8,8 @@ import {
   isBedRoom,
   normalizeRoomName,
   formatKamarOrBed,
-  formatPatientNameWithHonorific
+  formatPatientNameWithHonorific,
+  formatRoomDisplay
 } from '../data/constants';
 
 const KEY_PREFIX = 'sweepinganku';
@@ -189,13 +190,18 @@ export function cleanRemovedDoctorsFromStorage(): void {
       }
     }
 
+    const SEED_SAMPLE_IDS = new Set([
+      'p-1994648', 'p-02029139', 'p-02032640', 'p-02026511', 'p-02031900', 'p-02032317',
+      'p-02034100', 'p-02026268', 'p-02031580', 'p-02028071', 'p-01952560', 'p-01983979', 'p-02032635'
+    ]);
+
     keysToProcess.forEach(k => {
       const val = localStorage.getItem(k);
       if (!val) return;
       try {
         const parsed = JSON.parse(val);
         if (Array.isArray(parsed)) {
-          const cleaned = parsed.filter((p: any) => !isRemovedDoctor(p?.dpjp));
+          const cleaned = parsed.filter((p: any) => !isRemovedDoctor(p?.dpjp) && !SEED_SAMPLE_IDS.has(p?.id));
           if (cleaned.length !== parsed.length) {
             localStorage.setItem(k, JSON.stringify(cleaned));
           }
@@ -216,15 +222,12 @@ export function loadPatients(date: string, division: string, teamCode?: string):
   if (raw) {
     try {
       const list = JSON.parse(raw);
-      if (Array.isArray(list)) {
+      if (Array.isArray(list) && list.length > 0) {
         const filtered = list.filter((p: Patient) => !isRemovedDoctor(p?.dpjp));
         if (filtered.length !== list.length) {
           savePatients(date, division, filtered, teamCode);
         }
-        return filtered.map(p => ({
-          ...p,
-          name: formatPatientNameWithHonorific(p.name, p.age, p.jk)
-        }));
+        return filtered;
       }
     } catch {
       return [];
@@ -238,31 +241,16 @@ export function loadPatients(date: string, division: string, teamCode?: string):
     if (legacyRaw) {
       try {
         const legacyList = JSON.parse(legacyRaw);
-        if (Array.isArray(legacyList)) {
+        if (Array.isArray(legacyList) && legacyList.length > 0) {
           const filtered = legacyList.filter((p: Patient) => !isRemovedDoctor(p?.dpjp));
           savePatients(date, division, filtered, teamCode);
-          return filtered.map(p => ({
-            ...p,
-            name: formatPatientNameWithHonorific(p.name, p.age, p.jk)
-          }));
+          return filtered;
         }
       } catch {}
     }
   }
 
-  // Seed sample data if it's today and default division and nothing in storage yet
-  const hasEverSeeded = localStorage.getItem(`${KEY_PREFIX}:seeded`);
-  if (!hasEverSeeded && date === today()) {
-    localStorage.setItem(`${KEY_PREFIX}:seeded`, 'true');
-    const safeSeed = Array.isArray(SAMPLE_PATIENTS) ? SAMPLE_PATIENTS : [];
-    const seeded = safeSeed.map(p => ({
-      ...p,
-      name: formatPatientNameWithHonorific(p.name, p.age, p.jk)
-    }));
-    savePatients(date, division, seeded, teamCode);
-    return seeded;
-  }
-
+  // If no data exists, return empty array (rely solely on user input)
   return [];
 }
 
@@ -271,7 +259,7 @@ export function savePatients(date: string, division: string, patients: Patient[]
   const safePatients = Array.isArray(patients) ? patients : [];
   const normalized = safePatients.map(p => ({
     ...p,
-    name: formatPatientNameWithHonorific(p.name, p.age, p.jk)
+    name: p.name ? p.name.trim() : ''
   }));
   localStorage.setItem(k, JSON.stringify(normalized));
 
@@ -578,7 +566,115 @@ export function getDatesBetween(startDate: string, endDate: string): string[] {
   return result;
 }
 
-export function computeWeeklyRecap(startDate: string, endDate: string, division: string): {
+/**
+ * Helper to build an Excel-ready CSV string with BOM, sep=; directive,
+ * newline sanitization, and proper CSV cell escaping.
+ */
+export function buildExcelCsvString(
+  headers: string[],
+  rows: (string | number)[][],
+  delimiter: string = ';'
+): string {
+  const escapeCell = (val: string | number | undefined | null) => {
+    if (val === undefined || val === null) return '""';
+    const s = String(val)
+      .replace(/\r\n/g, ' ')
+      .replace(/[\r\n]/g, ' ')
+      .trim();
+    // If it's already an Excel formula like ="02029139", do not quote it further so Excel parses it
+    if (s.startsWith('="') && s.endsWith('"')) {
+      return s;
+    }
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+
+  const headerLine = headers.map(escapeCell).join(delimiter);
+  const dataLines = rows.map((r) => r.map(escapeCell).join(delimiter));
+
+  // sep=; directive instructs Microsoft Excel on Windows/Mac to automatically separate columns
+  return `sep=${delimiter}\r\n${headerLine}\r\n${dataLines.join('\r\n')}`;
+}
+
+export function triggerCsvDownload(csvString: string, filename: string): void {
+  const blob = new Blob(['\ufeff' + csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export function normalizeRmKey(rm?: string | null): string {
+  const clean = (rm || '').trim().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  // Menghilangkan awalan angka 0 agar format seperti 02029139 dan 2029139 presisi sebagai pasien yang sama
+  return clean.replace(/^0+/, '') || clean;
+}
+
+/**
+ * Gets unique individual patient records in a date range for detailed tabular export.
+ * Sesuai aturan: jika pasien muncul lagi di hari berikutnya, JANGAN diulangi.
+ * Keunikan dipastikan secara presisi menggunakan No. RM (normalizeRmKey).
+ * Hanya data yang berbeda yang ditambahkan.
+ */
+export function getWeeklyPatientList(
+  startDate: string,
+  endDate: string,
+  division: string,
+  teamCode?: string
+): Patient[] {
+  const dates = getDatesBetween(startDate, endDate);
+  const patientMap = new Map<string, Patient>();
+
+  dates.forEach((dt) => {
+    const list = loadPatients(dt, division, teamCode);
+    list.forEach((p) => {
+      if (!p.rm || isRemovedDoctor(p?.dpjp)) return;
+      const rmKey = normalizeRmKey(p.rm);
+      if (!rmKey) return;
+
+      const existing = patientMap.get(rmKey);
+      if (!existing) {
+        // Pasien pertama kali ditemukan dalam rentang tanggal rekap
+        patientMap.set(rmKey, {
+          ...p,
+          date: dt,
+          division: p.division || division
+        });
+      } else {
+        // Pasien muncul lagi di hari berikutnya: JANGAN diulangi.
+        // Cukup perbarui data terbaru (misal: perpindahan ruangan/kamar atau update diagnosis)
+        patientMap.set(rmKey, {
+          ...existing,
+          name: p.name || existing.name,
+          jk: p.jk || existing.jk,
+          age: p.age || existing.age,
+          dx: p.dx || existing.dx,
+          dpjp: p.dpjp || existing.dpjp,
+          room: p.room || existing.room,
+          kamar: p.kamar || existing.kamar,
+          lastDate: dt
+        });
+      }
+    });
+  });
+
+  const uniquePatients = Array.from(patientMap.values());
+
+  // Urutkan berdasarkan ruangan lalu nama pasien agar rapi
+  return uniquePatients.sort((a, b) => {
+    return (a.room || '').localeCompare(b.room || '') || (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+export function computeWeeklyRecap(
+  startDate: string,
+  endDate: string,
+  division: string,
+  teamCode?: string
+): {
   rows: WeeklyRow[];
   dates: string[];
 } {
@@ -586,50 +682,131 @@ export function computeWeeklyRecap(startDate: string, endDate: string, division:
   const map = new Map<string, WeeklyRow>();
 
   dates.forEach(dt => {
-    const raw = localStorage.getItem(getStorageKey(dt, division));
-    if (!raw) return;
-    try {
-      const dayPatients: Patient[] = JSON.parse(raw);
-      dayPatients.forEach(p => {
-        if (!p.rm || isRemovedDoctor(p?.dpjp)) return;
-        let r = map.get(p.rm);
-        if (!r) {
-          r = {
-            rm: p.rm,
-            name: p.name,
-            jk: p.jk || '-',
-            age: p.age || '-',
-            dpjp: p.dpjp,
-            dx: p.dx || '',
-            first: dt,
-            last: dt,
-            lastRoom: p.room,
-            lastKamar: p.kamar || '',
-            days: {}
-          };
-          map.set(p.rm, r);
-        }
-        r.name = p.name;
-        r.jk = p.jk;
-        r.age = p.age;
-        r.dpjp = p.dpjp;
-        r.dx = p.dx;
-        r.last = dt;
-        r.lastRoom = normalizeRoomName(p.room);
-        r.lastKamar = p.kamar;
-        const bedOrKamar = formatKamarOrBed(p.room, p.kamar);
-        r.days[dt] = `${normalizeRoomName(p.room)} (${bedOrKamar})`;
-      });
-    } catch {
-      // ignore parse error
-    }
+    const dayPatients = loadPatients(dt, division, teamCode);
+    dayPatients.forEach(p => {
+      if (!p.rm || isRemovedDoctor(p?.dpjp)) return;
+      const rmKey = normalizeRmKey(p.rm);
+      if (!rmKey) return;
+
+      let r = map.get(rmKey);
+      if (!r) {
+        r = {
+          rm: p.rm,
+          name: formatPatientNameWithHonorific(p.name, p.age, p.jk),
+          jk: p.jk || '-',
+          age: p.age || '-',
+          dpjp: p.dpjp,
+          dx: p.dx || '',
+          first: dt,
+          last: dt,
+          lastRoom: p.room,
+          lastKamar: p.kamar || '',
+          days: {}
+        };
+        map.set(rmKey, r);
+      }
+      r.name = formatPatientNameWithHonorific(p.name, p.age, p.jk);
+      r.jk = p.jk;
+      r.age = p.age;
+      r.dpjp = p.dpjp;
+      r.dx = p.dx;
+      r.last = dt;
+      r.lastRoom = normalizeRoomName(p.room);
+      r.lastKamar = p.kamar;
+      const bedOrKamar = formatKamarOrBed(p.room, p.kamar);
+      r.days[dt] = `${normalizeRoomName(p.room)} (${bedOrKamar})`;
+    });
   });
 
   const rows = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   return { rows, dates };
 }
 
-export function exportWeeklyCSV(rows: WeeklyRow[], dates: string[], division: string, startDate: string, endDate: string): void {
+/**
+ * Exports patient list as a clean, structured Excel-compatible CSV table
+ * matching the requested spreadsheet format with Ruangan as the final column:
+ * Columns: No | No. RM | Nama | JK | Usia | Diagnosis | DPJP | Ruangan
+ */
+export function exportPatientsCSV(
+  patients: Patient[],
+  division: string = 'Bedah',
+  dateOrRange: string = '',
+  filenamePrefix: string = 'daftar-pasien-sweeping',
+  delimiter: string = ';'
+): void {
+  if (!patients.length) return;
+
+  // Pastikan data pasien unik per No. RM (jika muncul berulang di hari berikutnya, jangan diulangi)
+  const seenRm = new Set<string>();
+  const uniquePatients: Patient[] = [];
+
+  patients.forEach((p) => {
+    const rmKey = normalizeRmKey(p.rm);
+    const key = rmKey || p.id || p.name;
+    if (!seenRm.has(key)) {
+      seenRm.add(key);
+      uniquePatients.push(p);
+    }
+  });
+
+  if (!uniquePatients.length) return;
+
+  const headers = [
+    'No',
+    'No. RM',
+    'Nama',
+    'JK',
+    'Usia',
+    'Diagnosis',
+    'DPJP',
+    'Ruangan'
+  ];
+
+  const dataRows = uniquePatients.map((p, i) => {
+    // Strip honorifics (Tn./Ny./An./etc.) to match the spreadsheet format
+    const cleanName = (p.name || '')
+      .replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '')
+      .trim();
+
+    // Preserve leading zero in No. RM for Excel (e.g. 02029139 -> ="02029139")
+    const cleanRm = (p.rm || '').replace(/["=]/g, '').trim();
+    const rmVal = cleanRm ? (cleanRm.startsWith('0') ? `="${cleanRm}"` : cleanRm) : '-';
+
+    // Age as clean number/text (e.g. '25 th' -> '25')
+    const cleanAge = (p.age || '').replace(/\s*(th|tahun|yr|year)s?/i, '').trim();
+
+    // Gender as L or P
+    const jkVal = p.jk ? (p.jk.toUpperCase().startsWith('L') ? 'L' : p.jk.toUpperCase().startsWith('P') ? 'P' : p.jk) : '-';
+
+    // Ruangan, e.g. "Edelweis K8"
+    const roomVal = formatRoomDisplay(p.room, p.kamar);
+
+    return [
+      i + 1,
+      rmVal,
+      cleanName || p.name || '-',
+      jkVal,
+      cleanAge || p.age || '-',
+      p.dx || '-',
+      p.dpjp || '-',
+      roomVal
+    ];
+  });
+
+  const csvString = buildExcelCsvString(headers, dataRows, delimiter);
+  const baseName = filenamePrefix || `Pasien-Bedah-${(division || 'Bedah').replace(/[^a-zA-Z0-9]/g, '-')}`;
+  const cleanFilename = baseName.endsWith('.csv') ? baseName : `${baseName}.csv`;
+  triggerCsvDownload(csvString, cleanFilename);
+}
+
+export function exportWeeklyCSV(
+  rows: WeeklyRow[],
+  dates: string[],
+  division: string,
+  startDate: string,
+  endDate: string,
+  delimiter: string = ';'
+): void {
   if (!rows.length) return;
   const dayHeaders = dates.map(x => {
     const d = parseDateSafely(x);
@@ -647,43 +824,34 @@ export function exportWeeklyCSV(rows: WeeklyRow[], dates: string[], division: st
     'Jenis Kelamin',
     'Usia',
     'DPJP',
-    'Ruangan Terakhir / Kamar & Bed',
+    'Ruangan Terakhir',
+    'No. Kamar / Bed',
+    'Lokasi Lengkap',
     'Diagnosis',
     'Tgl Pertama Sweeping',
     'Tgl Terakhir Sweeping',
     ...dayHeaders
   ];
 
-  const csvRows = [
-    headers,
-    ...rows.map((r, i) => [
-      i + 1,
-      r.rm,
-      r.name,
-      r.jk,
-      r.age,
-      r.dpjp,
-      `${normalizeRoomName(r.lastRoom)} / ${formatKamarOrBed(r.lastRoom, r.lastKamar)}`,
-      r.dx,
-      r.first,
-      r.last,
-      ...dates.map(d => r.days[d] || '-')
-    ])
-  ];
+  const dataRows = rows.map((r, i) => [
+    i + 1,
+    r.rm ? `="${r.rm.replace(/"/g, '')}"` : '-',
+    r.name,
+    r.jk === 'L' ? 'Laki-laki (L)' : r.jk === 'P' ? 'Perempuan (P)' : r.jk,
+    r.age,
+    r.dpjp,
+    normalizeRoomName(r.lastRoom),
+    formatKamarOrBed(r.lastRoom, r.lastKamar),
+    `${normalizeRoomName(r.lastRoom)} - ${formatKamarOrBed(r.lastRoom, r.lastKamar)}`,
+    r.dx,
+    r.first,
+    r.last,
+    ...dates.map(d => r.days[d] || '-')
+  ]);
 
-  const csvContent = csvRows
-    .map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `rekap-sweeping-${division.replace(/\s+/g, '-')}-${startDate}_${endDate}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const csvString = buildExcelCsvString(headers, dataRows, delimiter);
+  const cleanFilename = `rekap-sweeping-matriks-${division.replace(/\s+/g, '-')}-${startDate}_${endDate}.csv`;
+  triggerCsvDownload(csvString, cleanFilename);
 }
 
 const ROTATION_ROSTER_KEY = `${KEY_PREFIX}:rotation_roster`;

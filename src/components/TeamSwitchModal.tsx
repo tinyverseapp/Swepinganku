@@ -5,6 +5,7 @@ import { saveJoinedTeam, loadJoinedTeams } from '../utils/teamRegistry';
 import { today } from '../utils/storage';
 import { getCurrentWeekRange, getTeam, createOrUpdateTeam } from '../lib/teamService';
 import { Users, KeyRound, Copy, Check, X, RefreshCw, ArrowLeftRight, ShieldCheck, CalendarDays, Plus, LogIn, ArrowLeft } from 'lucide-react';
+import { useDivisionColors, getDivisionColorTheme } from '../utils/divisionColors';
 
 interface TeamSwitchModalProps { isOpen: boolean; onClose: () => void; currentTeam: DivisionTeam; currentDivision: string; koasName: string; onSwitchTeam: (newTeam: DivisionTeam, carryOverFromYesterday: boolean) => void; }
 function previousWeekStart(weekStart: string) { const d = new Date(`${weekStart}T12:00:00`); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); }
@@ -23,6 +24,8 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const currentTeamTheme = getDivisionColorTheme(currentTeam?.division);
+  const selectedDivTheme = getDivisionColorTheme(selectedDivision);
 
   useEffect(() => {
     if (isOpen) {
@@ -99,7 +102,30 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
         </div>
 
         <div className="p-5 overflow-y-auto space-y-5">
-          {currentTeam.teamCode && mode === 'choose' && <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] uppercase tracking-wider font-bold text-blue-700 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Tim aktif</div><div className="font-extrabold text-sm text-slate-900 truncate mt-1">{currentTeam.teamName || currentTeam.division}</div><div className="text-[11px] text-slate-500">{currentTeam.division} · PIN {currentTeam.teamCode}</div></div><button type="button" onClick={copyPin} className="shrink-0 px-2.5 py-2 rounded-lg bg-white border border-blue-200 text-xs font-bold text-blue-700 flex items-center gap-1 cursor-pointer">{copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{copied ? 'Tersalin' : 'Salin PIN'}</button></div>}
+          {currentTeam.teamCode && mode === 'choose' && (
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${currentTeamTheme.bannerBg}`}>
+              <div className="min-w-0">
+                <div className={`text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 ${currentTeamTheme.text}`}>
+                  <ShieldCheck className="w-3.5 h-3.5" />Tim aktif
+                </div>
+                <div className="font-extrabold text-sm text-slate-900 truncate mt-1">
+                  {currentTeam.teamName || currentTeam.division}
+                </div>
+                <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: currentTeamTheme.hex }} />
+                  <span>{currentTeam.division} · PIN {currentTeam.teamCode}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={copyPin}
+                className={`shrink-0 px-2.5 py-2 rounded-lg bg-white border ${currentTeamTheme.border} text-xs font-bold ${currentTeamTheme.text} flex items-center gap-1 cursor-pointer shadow-2xs`}
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Tersalin' : 'Salin PIN'}
+              </button>
+            </div>
+          )}
 
           {mode === 'choose' ? (
             <div className="space-y-3">
@@ -113,14 +139,34 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === 'create' ? <>
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Divisi Stase</label><select value={selectedDivision} onChange={(e) => handleDivisionChange(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">{(DIVISIONS || []).map((division) => <option key={division} value={division}>{division}</option>)}</select></div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs border border-white" style={{ backgroundColor: selectedDivTheme.hex }} />
+                      <span>Divisi Stase</span>
+                    </label>
+                    <select value={selectedDivision} onChange={(e) => handleDivisionChange(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
+                      {(DIVISIONS || []).map((division) => <option key={division} value={division}>{division}</option>)}
+                    </select>
+                  </div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5"><CalendarDays className="w-4 h-4 text-blue-600" />Tanggal pekan divisi</label><input required type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[11px] text-slate-500 mt-1.5">Tanggal akan otomatis dibulatkan ke <b>Senin–Minggu</b>: {week.weekStart} s/d {week.weekEnd}.</p></div>
                   <div><div className="flex items-center justify-between mb-1.5"><label className="text-xs font-bold text-slate-700">Kode Tim / PIN</label><button type="button" onClick={handleRandomPin} className="text-[11px] font-semibold text-blue-600 flex items-center gap-1 cursor-pointer"><RefreshCw className="w-3 h-3" />Acak PIN</button></div><div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={teamCodeInput} onChange={(e) => setTeamCodeInput(e.target.value.toUpperCase())} placeholder="Contoh: URO-101" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Tim</label><input required value={teamNameInput} onChange={(e) => setTeamNameInput(e.target.value)} placeholder={`Tim ${selectedDivision}`} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><p className="text-[10px] text-slate-400 mt-1">Nama ini menjadi nama bersama untuk semua anggota tim.</p></div>
                 </> : <>
                   <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5"><div className="text-xs font-extrabold text-emerald-900">Gabung dengan PIN</div><p className="text-[11px] text-emerald-700 mt-0.5">Tidak perlu memilih divisi atau tanggal. Semuanya mengikuti tim yang sudah dibuat.</p></div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Kode Tim / PIN</label><div className="flex gap-2"><input required value={teamCodeInput} onChange={(e) => { setTeamCodeInput(e.target.value.toUpperCase()); setJoinPreview(null); }} placeholder="Contoh: URO-101" className="flex-1 min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><button type="button" onClick={handleJoinPreview} disabled={busy} className="px-4 min-h-11 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-60 cursor-pointer">{busy ? 'Mencari...' : 'Cari Tim'}</button></div></div>
-                  {joinPreview && <div className="rounded-xl border border-emerald-200 bg-white p-4"><div className="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Tim ditemukan</div><div className="mt-1 text-sm font-extrabold text-slate-900">{joinPreview.teamName}</div><div className="text-xs text-slate-500 mt-0.5">{joinPreview.division} · {joinPreview.weekStart || '-'} s/d {joinPreview.weekEnd || '-'}</div></div>}
+                  {joinPreview && (() => {
+                    const previewTheme = getDivisionColorTheme(joinPreview.division);
+                    return (
+                      <div className={`rounded-xl border p-4 transition-all ${previewTheme.bannerBg}`}>
+                        <div className={`text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5 ${previewTheme.text}`}>
+                          <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: previewTheme.hex }} />
+                          <span>Tim ditemukan</span>
+                        </div>
+                        <div className="mt-1 text-sm font-extrabold text-slate-900">{joinPreview.teamName}</div>
+                        <div className="text-xs text-slate-600 mt-0.5">{joinPreview.division} · {joinPreview.weekStart || '-'} s/d {joinPreview.weekEnd || '-'}</div>
+                      </div>
+                    );
+                  })()}
                 </>}
 
                 <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Anggota</label><div className="relative"><Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={memberNameInput} onChange={(e) => setMemberNameInput(e.target.value)} placeholder="Nama Anda" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div></div>

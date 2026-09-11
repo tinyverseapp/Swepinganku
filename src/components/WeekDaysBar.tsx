@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { getWeekDays, shiftDateByDays, getStorageKey, today, formatIndonesianDate, isRemovedDoctor } from '../utils/storage';
+import { subscribeToTeamAllPatients } from '../lib/firestoreService';
 import { ChevronLeft, ChevronRight, Calendar, Copy, CheckCircle2, ArrowRight } from 'lucide-react';
+import { useDivisionColors } from '../utils/divisionColors';
 
 interface WeekDaysBarProps {
   currentDate: string;
@@ -8,6 +10,7 @@ interface WeekDaysBarProps {
   currentPatientCount: number;
   onSelectDate: (date: string) => void;
   onCopyFromDay?: (fromDate: string, dayName: string) => void;
+  teamCode?: string;
 }
 
 export function WeekDaysBar({
@@ -15,25 +18,60 @@ export function WeekDaysBar({
   division,
   currentPatientCount,
   onSelectDate,
-  onCopyFromDay
+  onCopyFromDay,
+  teamCode
 }: WeekDaysBarProps) {
+  const { activeTheme } = useDivisionColors(division);
   const todayDate = today();
   const effectiveDate = currentDate || todayDate;
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'copied'>('idle');
+  const [remoteCounts, setRemoteCounts] = useState<Record<string, number>>({});
+
+  // Real-time Firestore subscription: updates patient counts for all days in the team immediately
+  useEffect(() => {
+    if (!teamCode) {
+      setRemoteCounts({});
+      return;
+    }
+    const unsub = subscribeToTeamAllPatients(
+      teamCode,
+      (allPatients) => {
+        const counts: Record<string, number> = {};
+        allPatients.forEach((p) => {
+          if (p.date && !isRemovedDoctor(p.dpjp)) {
+            counts[p.date] = (counts[p.date] || 0) + 1;
+          }
+        });
+        setRemoteCounts(counts);
+      },
+      (err) => {
+        console.warn('Realtime week counts error:', err);
+      }
+    );
+    return () => unsub();
+  }, [teamCode]);
 
   const weekDays = useMemo(() => {
     return getWeekDays(effectiveDate, effectiveDate);
   }, [effectiveDate]);
 
-  // Compute patient count for each day of this week in this division
+  // Compute patient count for each day of this week in real time
   const patientCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     weekDays.forEach((w) => {
+      // 1. If remote real-time Firestore count is available for this team, use it directly
+      if (teamCode && typeof remoteCounts[w.date] === 'number') {
+        counts[w.date] = w.date === effectiveDate ? Math.max(remoteCounts[w.date], currentPatientCount) : remoteCounts[w.date];
+        return;
+      }
+      // 2. If it's the currently open day, use currentPatientCount
       if (w.date === effectiveDate) {
         counts[w.date] = currentPatientCount;
         return;
       }
-      const raw = localStorage.getItem(getStorageKey(w.date, division));
+      // 3. Look up from local cache using team key first, then division fallback
+      const teamKey = teamCode ? getStorageKey(w.date, division, teamCode) : null;
+      const raw = (teamKey && localStorage.getItem(teamKey)) || localStorage.getItem(getStorageKey(w.date, division));
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
@@ -47,7 +85,7 @@ export function WeekDaysBar({
       }
     });
     return counts;
-  }, [weekDays, effectiveDate, division, currentPatientCount]);
+  }, [weekDays, effectiveDate, division, teamCode, currentPatientCount, remoteCounts]);
 
   const startDateStr = weekDays[0]?.date || '';
   const endDateStr = weekDays[6]?.date || '';
@@ -85,12 +123,13 @@ export function WeekDaysBar({
     // Fallback to immediate previous day if count was 0 or not yet counted
     if (!targetPreviousDay && currentIdx > 0) {
       const prev = weekDays[currentIdx - 1];
-      const raw = localStorage.getItem(getStorageKey(prev.date, division));
+      const teamKey = teamCode ? getStorageKey(prev.date, division, teamCode) : null;
+      const raw = (teamKey && localStorage.getItem(teamKey)) || localStorage.getItem(getStorageKey(prev.date, division));
       let cnt = patientCounts[prev.date] || 0;
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) cnt = parsed.length;
+          if (Array.isArray(parsed)) cnt = parsed.filter((p: any) => !isRemovedDoctor(p?.dpjp)).length;
         } catch {}
       }
       if (cnt > 0) {
@@ -100,12 +139,16 @@ export function WeekDaysBar({
   } else if (currentIdx === 0) {
     // If it's Monday, check Sunday before Monday
     const prevSundayDate = shiftDateByDays(weekDays[0].date, -1);
-    const raw = localStorage.getItem(getStorageKey(prevSundayDate, division));
+    const teamKey = teamCode ? getStorageKey(prevSundayDate, division, teamCode) : null;
+    const raw = (teamKey && localStorage.getItem(teamKey)) || localStorage.getItem(getStorageKey(prevSundayDate, division));
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          targetPreviousDay = { date: prevSundayDate, dayName: 'Minggu Lalu', count: parsed.length };
+          const filtered = parsed.filter((p: any) => !isRemovedDoctor(p?.dpjp));
+          if (filtered.length > 0) {
+            targetPreviousDay = { date: prevSundayDate, dayName: 'Minggu Lalu', count: filtered.length };
+          }
         }
       } catch {}
     }
@@ -134,10 +177,13 @@ export function WeekDaysBar({
             <Calendar className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs sm:text-sm font-bold text-slate-900">
-                Jadwal Sweeping 1 Minggu ({division})
+                Jadwal Sweeping 1 Minggu
               </h3>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors ${activeTheme.badge}`}>
+                {division}
+              </span>
               {isCurrentWeek && (
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.2 rounded-full">
                   Minggu Berjalan
@@ -213,7 +259,7 @@ export function WeekDaysBar({
 
               {/* Date (e.g., 07 Sep) */}
               <span className={`text-[9px] sm:text-[11px] font-medium leading-none my-0.5 ${
-                isSelected ? 'text-blue-100' : 'text-slate-500'
+                isSelected ? 'text-white/85' : 'text-slate-500'
               }`}>
                 {w.dayOfMonth} <span className="hidden sm:inline">{w.monthName}</span>
               </span>

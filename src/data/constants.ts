@@ -42,8 +42,9 @@ export const DIVISION_CONSULTANTS: Record<string, string[]> = {
     'dr. David Hermawan Christian, Sp.BTKV, M.Ked.Klin.(K)'
   ],
   'Bedah Digestif & Umum': [
-    'dr. Ahmad T. Nasution, Sp.B.KBD',
-    'dr. Bambang Suprapto, Sp.B(K)BD'
+    'dr. Bambang Suprapto, Sp. B(K)BD',
+    'dr. Ahmad Toboroni Nasution, Sp. B(K)BD',
+    'dr. Ahmad Tobroni, Sp. B(K)BD'
   ],
   'Ortopedi': [
     'dr. Yasser Ridwan, Sp.OT, K-Spine, FICS',
@@ -179,26 +180,16 @@ export function formatPatientNameWithHonorific(name?: string, ageStr?: string, j
   return `${prefix} ${cleanName}`;
 }
 
-export const SAMPLE_PATIENTS: Patient[] = [
-  {
-    id: 'sample-p1', dpjp: 'dr. Andi Mohammad Ardan, SpBP-RE', room: 'Seroja', kamar: 'K201', name: 'Tn. Budi Santoso', jk: 'L', age: '34 th', rm: '00-88-21-45', dx: 'Vulnus Laceratum regio Facialis post debridement + heacting primer H+1, luka terawat kering', updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'sample-p2', dpjp: 'dr. Yudhy Arius, Sp.BP-RE', room: 'IGD', kamar: 'Bed 4', name: 'Ny. Siti Rahayu', jk: 'P', age: '29 th', rm: '00-89-10-33', dx: 'Combustio Grade IIA 15% regio antebrachii bilateral, kassa tulle terpasang', updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'sample-p3', dpjp: 'dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes', room: 'Seroja', kamar: 'K205', name: 'Ny. Endang Kusuma', jk: 'P', age: '48 th', rm: '00-90-12-09', dx: 'Post MRM sinistra H+2 ec Ca Mammae T2N1M0, drain aktif 30 cc serosanguineous', updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'sample-p4', dpjp: 'dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)', room: 'ICU', kamar: 'Bed 2', name: 'Tn. Hendro Wijaya', jk: 'L', age: '58 th', rm: '00-87-99-12', dx: 'Post Tiroidektomi Total H+1 ec Susp. Ca Tiroid, drain 10 cc serosa, sesak (-), stridor (-)', updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'sample-p5', dpjp: 'dr. Santi Rini., Sp.BA., Subsp.DA(K)', room: 'NICU', kamar: 'Bed 1', name: 'An. Ny. Rahmawati', jk: 'L', age: '3 hr', rm: '00-91-05-22', dx: 'Post Repair Atresia Ani H+1, TPN terpasang, saturasi 98% O2 nasal kanul', updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'sample-p6', dpjp: 'dr. Fahad Ahmed Shah Khaisama T., Sp.BA', room: 'PICU', kamar: 'Bed 3', name: 'An. Kevin Pratama', jk: 'L', age: '2 th', rm: '00-92-44-11', dx: 'Post Laparotomi Reduksi Invaginasi H+1, NGT alir cairan kehijauan minimal, luka operasi tenang', updatedAt: new Date().toISOString()
-  }
-];
+export function formatRoomDisplay(room?: string, kamar?: string): string {
+  const r = (room || '').trim();
+  const k = (kamar || '').trim();
+  if (!r && !k) return '-';
+  if (!k) return r;
+  if (!r) return k;
+  return `${r} ${k}`;
+}
+
+export const SAMPLE_PATIENTS: Patient[] = [];
 
 export const DEFAULT_TEAM_CODES: Record<string, string> = {
   'Bedah Digestif & Umum': 'DIGESTIF', 'Bedah Anak': 'BEDAH-ANAK', 'Urologi': 'UROLOGI', 'Ortopedi': 'ORTOPEDI', 'Bedah Saraf': 'BEDAH-SARAF', 'BTKV': 'BTKV', 'Bedah Plastik': 'BEDAH-PLASTIK', 'Bedah Onkologi': 'ONKOLOGI'

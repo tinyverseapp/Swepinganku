@@ -12,6 +12,7 @@ export interface Patient {
   teamCode?: string;
   date?: string;
   division?: string;
+  lastDate?: string;
 }
 
 export type ViewMode = 'dpjp' | 'all';
