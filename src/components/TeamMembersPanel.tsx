@@ -5,11 +5,7 @@ import { subscribeToTeam } from '../lib/teamService';
 import { getSavedActiveTeam, removeJoinedTeam } from '../utils/teamRegistry';
 import { auth } from '../lib/firebase';
 
-interface TeamMembersPanelProps {
-  onTeamLeft?: (teamCode: string) => void;
-}
-
-export function TeamMembersPanel({ onTeamLeft }: TeamMembersPanelProps) {
+export function TeamMembersPanel() {
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -80,10 +76,17 @@ export function TeamMembersPanel({ onTeamLeft }: TeamMembersPanelProps) {
     setError('');
     try {
       await leaveTeam(teamCode, currentUser.uid);
-      removeJoinedTeam(teamCode);
-      localStorage.removeItem('sweepinganku:activeTeam');
+      const remainingTeams = removeJoinedTeam(teamCode);
+      const nextTeam = remainingTeams[remainingTeams.length - 1];
+      if (nextTeam) {
+        localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(nextTeam));
+      } else {
+        // Empty marker prevents the legacy default team from being recreated after leaving.
+        localStorage.setItem('sweepinganku:activeTeam', JSON.stringify({ teamCode: '', division: '', teamName: '', members: [] }));
+      }
       setOpen(false);
-      onTeamLeft?.(teamCode);
+      // Reinitialize App state from the updated account/team registry.
+      window.location.reload();
     } catch (err) {
       console.error('[Firestore] leaveTeam error:', err);
       setError(err instanceof Error ? err.message : 'Gagal keluar dari tim. Pastikan koneksi dan Rules Firebase tersedia.');
