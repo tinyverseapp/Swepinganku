@@ -22,14 +22,14 @@ import { Patient } from '../types';
 const COLLECTION = 'sweepinganku';
 const WEEKLY_COLLECTION = 'sweepingankuWeekly';
 
-type WeeklyHistoryRecord = Patient & {
+export interface WeeklyHistoryRecord extends Patient {
   teamCode: string;
   weekStart: string;
   weekEnd: string;
   firstDate: string;
   lastDate: string;
   days: Record<string, { patient: Patient; recordedAt: string }>;
-};
+}
 
 function makeDocId(patient: Patient & { teamCode?: string; date?: string }): string {
   const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
@@ -71,11 +71,9 @@ function historyPayload(patient: Patient, teamCode: string, date: string) {
     weekEnd: getWeekEnd(weekStart),
     firstDate: date,
     lastDate: date,
-    days: {
-      [date]: { patient: { ...patient, teamCode, date }, recordedAt },
-    },
+    days: { [date]: { patient: { ...patient, teamCode, date }, recordedAt } },
     updatedAt: recordedAt,
-  } satisfies WeeklyHistoryRecord;
+  };
 }
 
 /** Record a patient occurrence permanently for the Monday-Sunday weekly recap. */
@@ -100,9 +98,7 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
 
     patients.forEach((p) => {
       const normalized = { ...p, teamCode, date, updatedAt: recordedAt };
-      const ref = doc(db, COLLECTION, makeDocId(normalized));
-      batch.set(ref, normalized);
-
+      batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
       if (normalized.rm) {
         const historyRef = doc(db, WEEKLY_COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
         batch.set(historyRef, {
@@ -124,18 +120,12 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
 }
 
 export async function fetchPatientsFromFirestore(teamCode: string, date: string): Promise<Patient[] | null> {
-  try {
-    const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
-    const snap = await getDocs(q);
-    if (snap.empty) return [];
-    return snap.docs.map((d) => d.data() as Patient);
-  } catch (err) {
-    console.error('[Firestore] fetchPatientsFromFirestore gagal:', err);
-    throw err;
-  }
+  const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Patient);
 }
 
-/** Fetch every current patient for a team in the requested date range. */
+/** Fetch every current patient for a team in the requested date range directly from Firestore. */
 export async function fetchPatientsForDateRange(teamCode: string, startDate: string, endDate: string): Promise<Patient[]> {
   if (!teamCode) return [];
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '>=', startDate), where('date', '<=', endDate));
@@ -143,7 +133,7 @@ export async function fetchPatientsForDateRange(teamCode: string, startDate: str
   return snap.docs.map((d) => d.data() as Patient);
 }
 
-/** Fetch current weekly-history records once. Used to backfill history for legacy daily data. */
+/** Backfill permanent weekly history from legacy/current daily records. */
 export async function seedWeeklyHistory(teamCode: string, startDate: string, endDate: string, patients: Patient[]): Promise<void> {
   if (!teamCode || !patients.length) return;
   const batch = writeBatch(db);
@@ -166,20 +156,11 @@ export async function seedWeeklyHistory(teamCode: string, startDate: string, end
   await batch.commit();
 }
 
-/** Realtime subscription to the permanent Monday-Sunday weekly history. */
-export function subscribeToWeeklyHistory(teamCode: string, weekStart: string, callback: (patients: Patient[]) => void, onError?: (error: Error) => void): Unsubscribe {
+/** Realtime subscription to permanent Monday-Sunday weekly history. */
+export function subscribeToWeeklyHistory(teamCode: string, weekStart: string, callback: (records: WeeklyHistoryRecord[]) => void, onError?: (error: Error) => void): Unsubscribe {
   if (!teamCode || !weekStart) { callback([]); return () => {}; }
   const q = query(collection(db, WEEKLY_COLLECTION), where('teamCode', '==', teamCode), where('weekStart', '==', weekStart));
-  return onSnapshot(q, (snap) => {
-    const records = snap.docs.map((d) => d.data() as WeeklyHistoryRecord);
-    const patients: Patient[] = records.map((record) => {
-      const days = record.days || {};
-      const occurrences = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
-      const latest = occurrences.length ? occurrences[occurrences.length - 1][1].patient : record;
-      return { ...latest, teamCode, lastDate: record.lastDate || latest.date };
-    });
-    callback(patients);
-  }, (err) => {
+  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => d.data() as WeeklyHistoryRecord)), (err) => {
     console.error('[Firestore] subscribeToWeeklyHistory error:', err);
     onError?.(err);
   });
@@ -205,8 +186,7 @@ export function subscribeToTeamAllPatients(teamCode: string, callback: (patients
 export async function deletePatientFromFirestore(patient: Patient & { teamCode?: string; date?: string }): Promise<void> {
   const teamCode = patient.teamCode || '';
   const date = patient.date || '';
-  // Intentionally keep weekly history. Deleting today's record must not erase the fact
-  // that the patient was present in this Monday-Sunday period.
+  // Weekly history is intentionally retained when a daily patient is deleted.
   if (teamCode && date && patient.rm) await recordWeeklyHistory(patient, teamCode, date);
   await deleteDoc(doc(db, COLLECTION, makeDocId(patient)));
 }
@@ -214,8 +194,7 @@ export async function deletePatientFromFirestore(patient: Patient & { teamCode?:
 export async function upsertPatientToFirestore(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   const normalized = { ...patient, teamCode, date, updatedAt: new Date().toISOString() };
-  const docId = makeDocId(normalized);
-  await setDoc(doc(db, COLLECTION, docId), normalized);
+  await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);
   await recordWeeklyHistory(normalized, teamCode, date);
 }
 
@@ -232,7 +211,6 @@ export async function movePatientToDateFirestore(patient: Patient, teamCode: str
   });
   if (duplicate) throw new Error(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${toDate}.`);
   const movedPatient: Patient = { ...patient, teamCode, date: toDate, updatedAt: new Date().toISOString() };
-  // Preserve the source occurrence and also record the destination occurrence.
   await recordWeeklyHistory(patient, teamCode, fromDate);
   await recordWeeklyHistory(movedPatient, teamCode, toDate);
   const batch = writeBatch(db);
