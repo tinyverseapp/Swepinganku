@@ -16,16 +16,9 @@ export function TeamMembersPanel() {
 
   useEffect(() => {
     const readTeam = () => {
-      try {
-        const raw = localStorage.getItem('sweepinganku:activeTeam');
-        const saved = raw ? JSON.parse(raw) : null;
-        const team = saved?.teamCode ? saved : getSavedActiveTeam();
-        setTeamCode(team?.teamCode?.trim().toUpperCase() || '');
-        setTeamName(team?.teamName || 'Tim aktif');
-      } catch {
-        setTeamCode('');
-        setTeamName('');
-      }
+      const team = getSavedActiveTeam();
+      setTeamCode(team?.teamCode?.trim().toUpperCase() || '');
+      setTeamName(team?.teamName || 'Tim aktif');
     };
     readTeam();
     const timer = window.setInterval(readTeam, 1000);
@@ -53,9 +46,10 @@ export function TeamMembersPanel() {
       if (!team) return;
       setTeamName(team.teamName || 'Tim aktif');
       try {
-        const raw = localStorage.getItem('sweepinganku:activeTeam');
-        const local = raw ? JSON.parse(raw) : {};
-        localStorage.setItem('sweepinganku:activeTeam', JSON.stringify({ ...local, ...team, teamCode }));
+        const local = getSavedActiveTeam();
+        if (local?.teamCode?.trim().toUpperCase() === teamCode) {
+          localStorage.setItem('sweepinganku:activeTeam', JSON.stringify({ ...local, ...team, teamCode }));
+        }
       } catch {}
     }, (err) => console.error('[Firestore] team metadata:', err));
 
@@ -69,27 +63,35 @@ export function TeamMembersPanel() {
   const handleLeaveTeam = async () => {
     const currentUser = auth.currentUser;
     if (!currentUser || !teamCode || leaving) return;
-    const confirmed = window.confirm(`Keluar dari ${teamName || 'tim ini'}?\n\nAnda tidak akan lagi terdaftar sebagai anggota tim ini pada akun ini.`);
+    const confirmed = window.confirm(`Keluar dari ${teamName || 'tim ini'}?\n\nAkun Anda akan dihapus dari daftar anggota tim ini. Data pasien tim tetap aman dan tidak ikut terhapus.`);
     if (!confirmed) return;
 
     setLeaving(true);
     setError('');
     try {
+      // 1. Revoke the actual Firebase membership first.
       await leaveTeam(teamCode, currentUser.uid);
+
+      // 2. Only after Firebase succeeds, invalidate the local cache.
       const remainingTeams = removeJoinedTeam(teamCode);
-      const nextTeam = remainingTeams[remainingTeams.length - 1];
+      const nextTeam = remainingTeams[remainingTeams.length - 1] || null;
       if (nextTeam) {
         localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(nextTeam));
       } else {
-        // Empty marker prevents the legacy default team from being recreated after leaving.
+        // Explicit empty state prevents any legacy/default fallback from returning.
         localStorage.setItem('sweepinganku:activeTeam', JSON.stringify({ teamCode: '', division: '', teamName: '', members: [] }));
       }
+
+      setTeamCode(nextTeam?.teamCode?.trim().toUpperCase() || '');
+      setTeamName(nextTeam?.teamName || '');
+      setMembers([]);
       setOpen(false);
-      // Reinitialize App state from the updated account/team registry.
+
+      // App state is initialized from the active team, so reload is intentional.
       window.location.reload();
     } catch (err) {
       console.error('[Firestore] leaveTeam error:', err);
-      setError(err instanceof Error ? err.message : 'Gagal keluar dari tim. Pastikan koneksi dan Rules Firebase tersedia.');
+      setError(err instanceof Error ? err.message : 'Gagal keluar dari tim. Perubahan lokal tidak dilakukan.');
     } finally {
       setLeaving(false);
     }
