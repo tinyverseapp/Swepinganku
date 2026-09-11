@@ -1,7 +1,8 @@
 /**
  * Firestore synchronization layer for Swepinganku patient data.
- * Daily collection: sweepinganku/{patientId}
- * Weekly historical collection: sweepingankuWeekly/{team_week_rm}
+ * Daily and weekly-history records intentionally share the existing
+ * `sweepinganku` collection so the weekly recap does not require a new
+ * Firestore collection/rules deployment.
  */
 
 import {
@@ -20,7 +21,16 @@ import { db } from './firebase';
 import { Patient } from '../types';
 
 const COLLECTION = 'sweepinganku';
-const WEEKLY_COLLECTION = 'sweepingankuWeekly';
+const WEEKLY_HISTORY_TYPE = 'weeklyHistory';
+
+type FirestorePatientRecord = Patient & {
+  recordType?: string;
+  weekStart?: string;
+  weekEnd?: string;
+  firstDate?: string;
+  lastDate?: string;
+  days?: Record<string, { patient: Patient; recordedAt: string }>;
+};
 
 export interface WeeklyHistoryRecord extends Patient {
   teamCode: string;
@@ -29,6 +39,7 @@ export interface WeeklyHistoryRecord extends Patient {
   firstDate: string;
   lastDate: string;
   days: Record<string, { patient: Patient; recordedAt: string }>;
+  recordType: typeof WEEKLY_HISTORY_TYPE;
 }
 
 function makeDocId(patient: Patient & { teamCode?: string; date?: string }): string {
@@ -57,16 +68,21 @@ function getWeekEnd(weekStart: string): string {
 
 function weeklyDocId(teamCode: string, weekStart: string, rm: string): string {
   const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
-  return `${safe(teamCode)}_${safe(weekStart)}_${safe(rmKey(rm))}`;
+  return `__WEEKLY__${safe(teamCode)}_${safe(weekStart)}_${safe(rmKey(rm))}`;
 }
 
-function historyPayload(patient: Patient, teamCode: string, date: string) {
+function isWeeklyHistory(data: FirestorePatientRecord): boolean {
+  return data.recordType === WEEKLY_HISTORY_TYPE;
+}
+
+function historyPayload(patient: Patient, teamCode: string, date: string): FirestorePatientRecord {
   const recordedAt = new Date().toISOString();
   const weekStart = getWeekStart(date);
   return {
     ...patient,
     teamCode,
     date,
+    recordType: WEEKLY_HISTORY_TYPE,
     weekStart,
     weekEnd: getWeekEnd(weekStart),
     firstDate: date,
@@ -76,22 +92,28 @@ function historyPayload(patient: Patient, teamCode: string, date: string) {
   };
 }
 
-/** Record a patient occurrence permanently for the Monday-Sunday weekly recap. */
+/** Permanently record one patient occurrence for the Monday-Sunday recap. */
 async function recordWeeklyHistory(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode || !date || !patient.rm) return;
   const payload = historyPayload(patient, teamCode, date);
-  const ref = doc(db, WEEKLY_COLLECTION, weeklyDocId(teamCode, payload.weekStart, patient.rm));
+  const ref = doc(db, COLLECTION, weeklyDocId(teamCode, payload.weekStart, patient.rm));
   await setDoc(ref, payload, { merge: true });
 }
 
-/** Save the complete patient list for one team/date and preserve weekly history. */
+/** Save the current patient list while preserving historical occurrences. */
 export async function savePatientsBatch(teamCode: string, date: string, patients: Patient[]): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   try {
     const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
     const existing = await getDocs(q);
     const batch = writeBatch(db);
-    existing.docs.forEach((d) => batch.delete(d.ref));
+
+    // Never delete weekly-history documents when replacing a daily list.
+    existing.docs.forEach((d) => {
+      const data = d.data() as FirestorePatientRecord;
+      if (!isWeeklyHistory(data)) batch.delete(d.ref);
+    });
+
     const recordedAt = new Date().toISOString();
     const weekStart = getWeekStart(date);
     const weekEnd = getWeekEnd(weekStart);
@@ -100,9 +122,10 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
       const normalized = { ...p, teamCode, date, updatedAt: recordedAt };
       batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
       if (normalized.rm) {
-        const historyRef = doc(db, WEEKLY_COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
+        const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
         batch.set(historyRef, {
           ...normalized,
+          recordType: WEEKLY_HISTORY_TYPE,
           weekStart,
           weekEnd,
           firstDate: date,
@@ -122,45 +145,69 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
 export async function fetchPatientsFromFirestore(teamCode: string, date: string): Promise<Patient[] | null> {
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Patient);
+  return snap.docs
+    .map((d) => d.data() as FirestorePatientRecord)
+    .filter((data) => !isWeeklyHistory(data))
+    .map((data) => data as Patient);
 }
 
-/** Fetch every current patient for a team in the requested date range directly from Firestore. */
+/** Fetch only current daily patients for the requested date range. */
 export async function fetchPatientsForDateRange(teamCode: string, startDate: string, endDate: string): Promise<Patient[]> {
   if (!teamCode) return [];
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '>=', startDate), where('date', '<=', endDate));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Patient);
+  return snap.docs
+    .map((d) => d.data() as FirestorePatientRecord)
+    .filter((data) => !isWeeklyHistory(data))
+    .map((data) => data as Patient);
 }
 
-/** Backfill permanent weekly history from legacy/current daily records. */
+/** Backfill weekly history from existing daily records. */
 export async function seedWeeklyHistory(teamCode: string, startDate: string, endDate: string, patients: Patient[]): Promise<void> {
   if (!teamCode || !patients.length) return;
   const batch = writeBatch(db);
   const recordedAt = new Date().toISOString();
-  patients.filter((p) => p.rm && p.date && p.date >= startDate && p.date <= endDate).forEach((p) => {
-    const date = p.date as string;
-    const weekStart = getWeekStart(date);
-    const ref = doc(db, WEEKLY_COLLECTION, weeklyDocId(teamCode, weekStart, p.rm));
-    batch.set(ref, {
-      ...p,
-      teamCode,
-      weekStart,
-      weekEnd: getWeekEnd(weekStart),
-      firstDate: date,
-      lastDate: date,
-      updatedAt: recordedAt,
-      [`days.${date}`]: { patient: { ...p, teamCode, date }, recordedAt },
-    }, { merge: true });
-  });
+
+  patients
+    .filter((p) => p.rm && p.date && p.date >= startDate && p.date <= endDate)
+    .forEach((p) => {
+      const date = p.date as string;
+      const weekStart = getWeekStart(date);
+      const ref = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, p.rm));
+      batch.set(ref, {
+        ...p,
+        teamCode,
+        recordType: WEEKLY_HISTORY_TYPE,
+        weekStart,
+        weekEnd: getWeekEnd(weekStart),
+        firstDate: date,
+        lastDate: date,
+        updatedAt: recordedAt,
+        [`days.${date}`]: { patient: { ...p, teamCode, date }, recordedAt },
+      }, { merge: true });
+    });
+
   await batch.commit();
 }
 
-/** Realtime subscription to permanent Monday-Sunday weekly history. */
-export function subscribeToWeeklyHistory(teamCode: string, weekStart: string, callback: (records: WeeklyHistoryRecord[]) => void, onError?: (error: Error) => void): Unsubscribe {
+/** Realtime subscription to permanent Monday-Sunday history in the existing collection. */
+export function subscribeToWeeklyHistory(
+  teamCode: string,
+  weekStart: string,
+  callback: (records: WeeklyHistoryRecord[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
   if (!teamCode || !weekStart) { callback([]); return () => {}; }
-  const q = query(collection(db, WEEKLY_COLLECTION), where('teamCode', '==', teamCode), where('weekStart', '==', weekStart));
-  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => d.data() as WeeklyHistoryRecord)), (err) => {
+
+  // Query only by teamCode to avoid requiring a new composite index. The
+  // recordType/weekStart filter is intentionally done client-side.
+  const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode));
+  return onSnapshot(q, (snap) => {
+    const records = snap.docs
+      .map((d) => d.data() as FirestorePatientRecord)
+      .filter((data) => isWeeklyHistory(data) && data.weekStart === weekStart) as WeeklyHistoryRecord[];
+    callback(records);
+  }, (err) => {
     console.error('[Firestore] subscribeToWeeklyHistory error:', err);
     onError?.(err);
   });
@@ -168,7 +215,13 @@ export function subscribeToWeeklyHistory(teamCode: string, weekStart: string, ca
 
 export function subscribeToPatients(teamCode: string, date: string, callback: (patients: Patient[]) => void, onError?: (error: Error) => void): Unsubscribe {
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
-  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => d.data() as Patient)), (err) => {
+  return onSnapshot(q, (snap) => {
+    const patients = snap.docs
+      .map((d) => d.data() as FirestorePatientRecord)
+      .filter((data) => !isWeeklyHistory(data))
+      .map((data) => data as Patient);
+    callback(patients);
+  }, (err) => {
     console.error('[Firestore] subscribeToPatients error:', err);
     onError?.(err);
   });
@@ -177,7 +230,13 @@ export function subscribeToPatients(teamCode: string, date: string, callback: (p
 export function subscribeToTeamAllPatients(teamCode: string, callback: (patients: Patient[]) => void, onError?: (error: Error) => void): Unsubscribe {
   if (!teamCode) { callback([]); return () => {}; }
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode));
-  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => d.data() as Patient)), (err) => {
+  return onSnapshot(q, (snap) => {
+    const patients = snap.docs
+      .map((d) => d.data() as FirestorePatientRecord)
+      .filter((data) => !isWeeklyHistory(data))
+      .map((data) => data as Patient);
+    callback(patients);
+  }, (err) => {
     console.error('[Firestore] subscribeToTeamAllPatients error:', err);
     onError?.(err);
   });
@@ -186,7 +245,7 @@ export function subscribeToTeamAllPatients(teamCode: string, callback: (patients
 export async function deletePatientFromFirestore(patient: Patient & { teamCode?: string; date?: string }): Promise<void> {
   const teamCode = patient.teamCode || '';
   const date = patient.date || '';
-  // Weekly history is intentionally retained when a daily patient is deleted.
+  // Keep the weekly occurrence before deleting the daily record.
   if (teamCode && date && patient.rm) await recordWeeklyHistory(patient, teamCode, date);
   await deleteDoc(doc(db, COLLECTION, makeDocId(patient)));
 }
@@ -202,17 +261,20 @@ export async function movePatientToDateFirestore(patient: Patient, teamCode: str
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   if (!fromDate || !toDate) throw new Error('Tanggal asal/tujuan tidak valid.');
   if (fromDate === toDate) throw new Error('Tanggal tujuan sama dengan tanggal asal.');
+
   const targetQuery = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', toDate));
   const targetSnap = await getDocs(targetQuery);
   const patientRm = patient.rm?.trim().toLowerCase();
   const duplicate = targetSnap.docs.some((d) => {
-    const data = d.data() as Patient;
-    return !!patientRm && data.rm?.trim().toLowerCase() === patientRm;
+    const data = d.data() as FirestorePatientRecord;
+    return !isWeeklyHistory(data) && !!patientRm && data.rm?.trim().toLowerCase() === patientRm;
   });
   if (duplicate) throw new Error(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${toDate}.`);
+
   const movedPatient: Patient = { ...patient, teamCode, date: toDate, updatedAt: new Date().toISOString() };
   await recordWeeklyHistory(patient, teamCode, fromDate);
   await recordWeeklyHistory(movedPatient, teamCode, toDate);
+
   const batch = writeBatch(db);
   batch.delete(doc(db, COLLECTION, makeDocId({ ...patient, teamCode, date: fromDate })));
   batch.set(doc(db, COLLECTION, makeDocId(movedPatient)), movedPatient);
