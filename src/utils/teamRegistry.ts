@@ -32,6 +32,18 @@ export function saveJoinedTeam(team: DivisionTeam): void {
   }
 }
 
+/** Remove a team from this account's joined-team list. */
+export function removeJoinedTeam(teamCode: string): DivisionTeam[] {
+  try {
+    const normalizedCode = teamCode.trim().toUpperCase();
+    const next = loadJoinedTeams().filter((team) => team.teamCode.trim().toUpperCase() !== normalizedCode);
+    localStorage.setItem(getKey(), JSON.stringify(next));
+    return next;
+  } catch {
+    return loadJoinedTeams();
+  }
+}
+
 export function getJoinedDivisions(): string[] {
   return Array.from(new Set(loadJoinedTeams().map((team) => team.division).filter(Boolean)));
 }
