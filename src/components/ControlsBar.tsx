@@ -30,6 +30,7 @@ interface ControlsBarProps {
   onOpenTeamModal?: () => void;
   onHandoverPatients?: () => void;
   onAddPatient?: () => void;
+  onOpenAiImport?: () => void;
 }
 
 export function ControlsBar({
@@ -44,7 +45,8 @@ export function ControlsBar({
   activeTeam,
   onOpenTeamModal,
   onHandoverPatients,
-  onAddPatient
+  onAddPatient,
+  onOpenAiImport
 }: ControlsBarProps) {
   const savedTeam = getSavedActiveTeam();
   const joinedDivisions = getJoinedDivisions();
@@ -152,6 +154,17 @@ export function ControlsBar({
       <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold"><Sparkles className="w-3.5 h-3.5 text-blue-600" /><span>Aksi &amp; Rekap:</span></div>
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenAiImport && (
+            <button
+              type="button"
+              onClick={onOpenAiImport}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
+              title="Salin & Tempel Catatan Teks untuk Diubah Menjadi Pasien Otomatis oleh AI"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 shrink-0 animate-pulse" />
+              <span>AI Impor Catatan</span>
+            </button>
+          )}
           {onAddPatient && <button type="button" onClick={onAddPatient} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Tambah Pasien Baru"><UserPlus className="w-4 h-4 shrink-0" /><span>+ Tambah Pasien</span></button>}
           <button type="button" onClick={onOpenWeekly} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Lihat Rekapitulasi Mingguan dan Ekspor Excel/CSV"><FileSpreadsheet className="w-4 h-4 text-emerald-100 shrink-0" /><span>Rekap Mingguan &amp; CSV</span></button>
         </div>

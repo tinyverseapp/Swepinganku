@@ -36,7 +36,8 @@ import {
   PanelLeft,
   PanelLeftClose,
   Menu,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
@@ -54,6 +55,7 @@ interface DocumentSweepingViewProps {
   activeTeam?: DivisionTeam;
   onOpenTeamModal?: () => void;
   onHandoverPatients?: () => void;
+  onOpenAiImport?: () => void;
 }
 
 export function DocumentSweepingView({
@@ -69,7 +71,8 @@ export function DocumentSweepingView({
   onEditPatient,
   activeTeam,
   onOpenTeamModal,
-  onHandoverPatients
+  onHandoverPatients,
+  onOpenAiImport
 }: DocumentSweepingViewProps) {
   // Active Tab: 'all' (Semua Pasien / Residen) or a specific DPJP name
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -295,6 +298,18 @@ export function DocumentSweepingView({
             <Printer className="w-4 h-4 text-slate-500" />
             <span className="hidden sm:inline">Cetak</span>
           </button>
+
+          {/* AI Import button */}
+          {onOpenAiImport && (
+            <button
+              onClick={onOpenAiImport}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-xs cursor-pointer min-h-[36px] shrink-0"
+              title="Ekstrak & Impor Catatan Pasien dengan AI"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+              <span>AI Impor</span>
+            </button>
+          )}
 
           {/* Add Patient on desktop */}
           <button
