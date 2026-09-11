@@ -169,3 +169,51 @@ export async function upsertPatientToFirestore(
     throw err;
   }
 }
+
+/**
+ * Move one patient atomically from one date to another for the same team.
+ * The source document is deleted and the destination document is created in
+ * a single Firestore batch so other team members see one consistent change.
+ */
+export async function movePatientToDateFirestore(
+  patient: Patient,
+  teamCode: string,
+  fromDate: string,
+  toDate: string
+): Promise<void> {
+  if (!teamCode) throw new Error('Kode tim Firebase kosong.');
+  if (!fromDate || !toDate) throw new Error('Tanggal asal/tujuan tidak valid.');
+  if (fromDate === toDate) throw new Error('Tanggal tujuan sama dengan tanggal asal.');
+
+  try {
+    const targetQuery = query(
+      collection(db, COLLECTION),
+      where('teamCode', '==', teamCode),
+      where('date', '==', toDate)
+    );
+    const targetSnap = await getDocs(targetQuery);
+    const patientRm = patient.rm?.trim().toLowerCase();
+    const duplicate = targetSnap.docs.some((d) => {
+      const data = d.data() as Patient;
+      return patientRm && data.rm?.trim().toLowerCase() === patientRm;
+    });
+
+    if (duplicate) {
+      throw new Error(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${toDate}.`);
+    }
+
+    const movedPatient: Patient = {
+      ...patient,
+      teamCode,
+      date: toDate,
+      updatedAt: new Date().toISOString(),
+    };
+    const batch = writeBatch(db);
+    batch.delete(doc(db, COLLECTION, makeDocId({ ...patient, teamCode, date: fromDate })));
+    batch.set(doc(db, COLLECTION, makeDocId(movedPatient)), movedPatient);
+    await batch.commit();
+  } catch (err) {
+    console.error('[Firestore] movePatientToDateFirestore gagal:', err);
+    throw err;
+  }
+}
