@@ -1,0 +1,54 @@
+name: Fix current TypeScript errors
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fix DocumentSweepingView unknown string type
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/DocumentSweepingView.tsx')
+          s = p.read_text()
+          old = "base.some((b: string) => b.toLowerCase() === r.toLowerCase())"
+          new = "base.some(b => String(b).toLowerCase() === r.toLowerCase())"
+          if old in s:
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+
+      - name: Fix Date comparison in storage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/utils/storage.ts')
+          s = p.read_text()
+          s = s.replace('targetTime<=e', 'targetTime<=e.getTime()')
+          s = s.replace('targetTime <= e', 'targetTime <= e.getTime()')
+          p.write_text(s)
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: Verify TypeScript
+        run: npm run lint
+
+      - name: Commit fixes and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/DocumentSweepingView.tsx src/utils/storage.ts .github/workflows/fix-ts-errors.yml
+          git rm .github/workflows/fix-ts-errors.yml
+          git commit -m "fix: resolve remaining TypeScript errors"
+          git push
