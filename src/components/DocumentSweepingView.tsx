@@ -44,7 +44,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
     const base = allRooms && allRooms.length ? allRooms : MASTER_ROOMS;
     const current = Array.from(new Set(currentTabPatients.map(p => normalizeRoomName(p.room))));
     const custom = current.filter(r => !base.some(b => String(b).toLowerCase() === r.toLowerCase()));
-    return [...base, ...custom];
+    return [...base, ...custom];	
   }, [allRooms, currentTabPatients]);
 
   const handleCopyWA = async () => {
