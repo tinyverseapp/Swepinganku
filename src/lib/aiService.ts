@@ -1,4 +1,9 @@
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { doc, runTransaction } from 'firebase/firestore';
+
+const MAX_AI_REQUESTS_PER_DAY = 5;
+const AI_USAGE_TEAM_CODE = '__AI_USAGE__';
+const ADMIN_EMAIL = 'm.hafidzuddin.s@gmail.com';
 
 export interface ParsedPatientRaw {
   name: string;
@@ -20,6 +25,56 @@ export interface ParseResponse {
   error?: string;
 }
 
+class AiDailyQuotaError extends Error {
+  code = 'AI_DAILY_LIMIT';
+  constructor() {
+    super(`Batas penggunaan AI hari ini sudah tercapai (${MAX_AI_REQUESTS_PER_DAY}x). Kuota akan tersedia kembali besok.`);
+  }
+}
+
+function getQuotaDate(): string {
+  const timeZone = 'Asia/Makassar';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function isAdminUser(): boolean {
+  return String(auth.currentUser?.email || '').trim().toLowerCase() === ADMIN_EMAIL;
+}
+
+async function reserveDailyAiQuota(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi login tidak ditemukan. Silakan login kembali sebelum menggunakan AI.');
+  if (isAdminUser()) return;
+
+  const quotaDate = getQuotaDate();
+  const quotaRef = doc(db, 'teamMembers', AI_USAGE_TEAM_CODE, 'members', user.uid);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(quotaRef);
+    const data = snapshot.exists() ? snapshot.data() : {};
+    const storedDate = String(data.aiQuotaDate || '');
+    const storedCount = storedDate === quotaDate ? Number(data.aiQuotaCount || 0) : 0;
+    const currentCount = Number.isFinite(storedCount) && storedCount >= 0 ? Math.floor(storedCount) : 0;
+
+    if (currentCount >= MAX_AI_REQUESTS_PER_DAY) {
+      throw new AiDailyQuotaError();
+    }
+
+    transaction.set(quotaRef, {
+      uid: user.uid,
+      name: user.displayName || user.email || user.uid,
+      email: user.email || '',
+      aiQuotaDate: quotaDate,
+      aiQuotaCount: currentCount + 1,
+    }, { merge: true });
+  });
+}
+
 export async function parsePatientsWithAi(
   text: string,
   division: string,
@@ -31,8 +86,12 @@ export async function parsePatientsWithAi(
   try {
     const user = auth.currentUser;
     if (!user) throw new Error('Sesi login tidak ditemukan. Silakan login kembali sebelum menggunakan AI.');
-    const idToken = await user.getIdToken();
 
+    // Quota is reserved atomically in Firestore before the Gemini request.
+    // This makes the limit account-based and consistent across devices for the same Firebase user.
+    await reserveDailyAiQuota();
+
+    const idToken = await user.getIdToken();
     response = await fetch('/api/ai/parse-patients', {
       method: 'POST',
       headers: {
@@ -41,8 +100,12 @@ export async function parsePatientsWithAi(
       },
       body: JSON.stringify({ text, division, knownRooms, knownDpjps, knownPediatricDpjps }),
     });
-  } catch (netErr: any) {
-    if (netErr?.message?.includes('Sesi login')) throw netErr;
+  } catch (err: any) {
+    if (err?.code === 'AI_DAILY_LIMIT') throw err;
+    if (err?.message?.includes('Sesi login')) throw err;
+    if (err?.code === 'permission-denied') {
+      throw new Error('Kuota AI tidak dapat dicatat karena izin Firebase belum tersinkron. Silakan coba lagi setelah konfigurasi Firebase diperbarui.');
+    }
     throw new Error('Tidak dapat terhubung ke server AI. Periksa koneksi internet Anda atau coba sesaat lagi.');
   }
 
