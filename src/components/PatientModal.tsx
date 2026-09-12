@@ -237,8 +237,20 @@ export function PatientModal({
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">Usia Pasien</label>
-              <input type="text" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Contoh: 45 th / 14 th / 8 bln" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
-              <p className="text-[10px] text-slate-500 mt-1">{parsedYears !== null ? parsedYears < 18 ? <span className="text-amber-700 font-medium">✓ Usia &lt; 18 th ({parsedYears.toFixed(parsedYears < 1 ? 1 : 0)} th) → Otomatis <b>An.</b></span> : <span className="text-blue-700 font-medium">✓ Usia ≥ 18 th ({parsedYears} th, {jk === 'L' ? 'L' : 'P'}) → Otomatis <b>{jk === 'L' ? 'Tn.' : 'Ny.'}</b></span> : <span>Ketik usia untuk deteksi otomatis (misal: 14 th → An., 45 th → Tn./Ny.)</span>}</p>
+              <input type="text" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Contoh: 15 hari / 8 bln / 14 th / 45 th" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+              <p className="text-[10px] text-slate-500 mt-1">
+                {autoHonorific ? (
+                  autoHonorific === 'By.' ? (
+                    <span className="text-emerald-700 font-medium">✓ Usia &lt; 1 bulan ({age}) → Otomatis <b>By.</b></span>
+                  ) : autoHonorific === 'An.' ? (
+                    <span className="text-amber-700 font-medium">✓ Usia 1 bln s.d. &lt; 18 th → Otomatis <b>An.</b></span>
+                  ) : (
+                    <span className="text-blue-700 font-medium">✓ Usia dewasa ({jk === 'L' ? 'L' : 'P'}) → Otomatis <b>{autoHonorific}</b></span>
+                  )
+                ) : (
+                  <span>Ketik usia untuk deteksi otomatis (misal: 10 hr → By., 14 th → An., 45 th → Tn./Ny.)</span>
+                )}
+              </p>
             </div>
 
             <div className="sm:col-span-2">

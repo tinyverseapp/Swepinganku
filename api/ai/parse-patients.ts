@@ -204,7 +204,7 @@ DAFTAR RUANGAN ACUAN:
 ${Array.isArray(knownRooms) && knownRooms.length ? knownRooms.join(", ") : "-"}
 
 FIELD LAIN:
-1. name: nama pasien seperti tertulis.
+1. name: nama pasien seperti tertulis. Jika pasien berusia kurang dari 1 bulan gunakan sebutan "By." (misal: "By. Dania" atau "By. Ny. Rahma").
 2. age: usia bila eksplisit; jika tidak ada, "".
 3. jk: hanya L/P jika eksplisit atau jelas dari Tn/Bpk/Sdr atau Ny/Ibu/Nn/Sdri. Jika tidak jelas, "".
 4. rm: nomor RM bila ada; jika tidak ada, "".

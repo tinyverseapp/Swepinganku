@@ -33,9 +33,105 @@ export const BED_ONLY_ROOMS: string[] = ['NICU','PICU','ICCU','ICU'];
 export function isBedRoom(roomName?: string): boolean { if (!roomName) return false; const upper = roomName.trim().toUpperCase(); return BED_ONLY_ROOMS.some((r) => r.toUpperCase() === upper); }
 export function normalizeRoomName(roomName?: string): string { if (!roomName) return ''; const trimmed = roomName.trim(); const found = MASTER_ROOMS.find((r) => r.toLowerCase() === trimmed.toLowerCase()); return found || trimmed; }
 export function formatKamarOrBed(roomName?: string, kamarVal?: string): string { const isBed = isBedRoom(roomName); if (!kamarVal || !kamarVal.trim() || kamarVal.trim() === '-' || kamarVal.trim().toLowerCase() === 'kamar -') return isBed ? 'Bed -' : 'K-'; const clean = kamarVal.trim(); if (isBed) return /^bed\s*/i.test(clean) ? clean.replace(/^bed\s*/i, 'Bed ') : `Bed ${clean}`; let nonBed = clean; if (/^kamar\s*/i.test(nonBed)) nonBed = nonBed.replace(/^kamar\s*/i, ''); else if (/^k[\.\s]+/i.test(nonBed)) nonBed = nonBed.replace(/^k[\.\s]+/i, ''); else if (/^k(?=[0-9])/i.test(nonBed)) nonBed = nonBed.replace(/^k/i, ''); return `K${nonBed}`; }
-export function parseAgeInYears(ageStr?: string): number | null { if (!ageStr) return null; const s = ageStr.toLowerCase().trim(); if (!s) return null; if (/(bln|bulan|month)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) { const m=s.match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(',','.'))/12 : 0; } if (/(hr|hari|day)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) { const m=s.match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(',','.'))/365 : 0; } if (/(mgg|minggu|wk|week)/i.test(s) && !/(th|tahun|yr|year)/i.test(s)) { const m=s.match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(',','.'))/52 : 0; } const m=s.match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(',','.')) : null; }
-export function getPatientHonorific(ageStr?: string, jk?: 'L'|'P'|string): 'An.'|'Tn.'|'Ny.'|'' { const ageYears=parseAgeInYears(ageStr); if(ageYears!==null && ageYears<18) return 'An.'; if(jk==='P') return 'Ny.'; if(jk==='L') return 'Tn.'; return ''; }
-export function formatPatientNameWithHonorific(name?: string, ageStr?: string, jk?: 'L'|'P'|string): string { if(!name||!name.trim()) return ''; const trimmed=name.trim(); const prefix=getPatientHonorific(ageStr,jk); let cleanName=trimmed; if(/^(by\.?\s*ny\.?|bayi\s*ny\.?)\s+/i.test(cleanName)){ cleanName=cleanName.replace(/^(by\.?\s*|bayi\s*)/i,'').trim(); if(prefix!=='An.') cleanName=cleanName.replace(/^(ny\.?|nyonya)\s+/i,'').trim(); } else cleanName=cleanName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i,'').trim(); if(!cleanName) return prefix ? `${prefix} ${trimmed}` : trimmed; return prefix ? `${prefix} ${cleanName}` : cleanName; }
+export function parseAgeInDays(ageStr?: string): number | null {
+  if (!ageStr) return null;
+  const s = ageStr.toLowerCase().trim();
+  if (!s) return null;
+
+  // Indikator langsung kurang dari 1 bulan: "< 1 bln", "< 1 bulan", dsb.
+  if (/<\s*1\s*(?:bln|bulan|mo|month)/.test(s)) return 15;
+  if (/^0\s*(?:bln|bulan|mo|month)/.test(s)) return 15;
+
+  let totalDays = 0;
+  let matched = false;
+
+  const yr = s.match(/(\d+(?:[.,]\d+)?)\s*(?:th|tahun|thn|yr|year)/);
+  if (yr) {
+    totalDays += parseFloat(yr[1].replace(',', '.')) * 365;
+    matched = true;
+  }
+
+  const mo = s.match(/(\d+(?:[.,]\d+)?)\s*(?:bln|bulan|mo|month)/);
+  if (mo) {
+    totalDays += parseFloat(mo[1].replace(',', '.')) * 30.4375;
+    matched = true;
+  }
+
+  const wk = s.match(/(\d+(?:[.,]\d+)?)\s*(?:mgg|minggu|wk|week)/);
+  if (wk) {
+    totalDays += parseFloat(wk[1].replace(',', '.')) * 7;
+    matched = true;
+  }
+
+  const dy = s.match(/(\d+(?:[.,]\d+)?)\s*(?:hr|hari|day)/);
+  if (dy) {
+    totalDays += parseFloat(dy[1].replace(',', '.'));
+    matched = true;
+  }
+
+  const hr = s.match(/(\d+(?:[.,]\d+)?)\s*(?:jam|hour)/);
+  if (hr) {
+    totalDays += parseFloat(hr[1].replace(',', '.')) / 24;
+    matched = true;
+  }
+
+  if (matched) return totalDays;
+
+  const plainNum = s.match(/^(\d+(?:[.,]\d+)?)$/);
+  if (plainNum) return parseFloat(plainNum[1].replace(',', '.')) * 365;
+
+  const fallbackNum = s.match(/(\d+(?:[.,]\d+)?)/);
+  if (fallbackNum) return parseFloat(fallbackNum[1].replace(',', '.')) * 365;
+
+  return null;
+}
+
+export function parseAgeInYears(ageStr?: string): number | null {
+  const days = parseAgeInDays(ageStr);
+  if (days === null) return null;
+  return days / 365;
+}
+
+export function getPatientHonorific(ageStr?: string, jk?: 'L'|'P'|string, rawName?: string): 'By.'|'An.'|'Tn.'|'Ny.'|'' {
+  const days = parseAgeInDays(ageStr);
+  if (days !== null) {
+    // Usia kurang dari 1 bulan (< 30 hari) menjadi "By."
+    if (days < 30) return 'By.';
+    // Usia 1 bulan hingga < 18 tahun menjadi "An."
+    if (days < 18 * 365) return 'An.';
+    // Usia ≥ 18 tahun
+    if (jk === 'P') return 'Ny.';
+    if (jk === 'L') return 'Tn.';
+    return '';
+  }
+
+  if (rawName && /^(by\.?|bayi)\s+/i.test(rawName.trim())) return 'By.';
+  if (rawName && /^(an\.?|anak)\s+/i.test(rawName.trim())) return 'An.';
+
+  if (jk === 'P') return 'Ny.';
+  if (jk === 'L') return 'Tn.';
+  return '';
+}
+
+export function formatPatientNameWithHonorific(name?: string, ageStr?: string, jk?: 'L'|'P'|string): string {
+  if (!name || !name.trim()) return '';
+  const trimmed = name.trim();
+  const prefix = getPatientHonorific(ageStr, jk, trimmed);
+  let cleanName = trimmed;
+
+  if (/^(by\.?\s*ny\.?|bayi\s*ny\.?)\s+/i.test(cleanName)) {
+    cleanName = cleanName.replace(/^(by\.?\s*|bayi\s*)/i, '').trim();
+    if (prefix !== 'An.' && prefix !== 'By.') {
+      cleanName = cleanName.replace(/^(ny\.?|nyonya)\s+/i, '').trim();
+    }
+  } else {
+    cleanName = cleanName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
+  }
+
+  if (!cleanName) return prefix ? `${prefix} ${trimmed}` : trimmed;
+  if (!prefix) return trimmed;
+  return `${prefix} ${cleanName}`;
+}
 export function formatRoomDisplay(room?: string,kamar?: string): string { const r=(room||'').trim(); const k=(kamar||'').trim(); if(!r&&!k)return '-'; if(!k)return r; if(!r)return k; return `${r} ${k}`; }
 export const SAMPLE_PATIENTS: Patient[] = [];
 export const DEFAULT_TEAM_CODES: Record<string,string> = {'Bedah Digestif & Umum':'DIGESTIF','Bedah Anak':'BEDAH-ANAK','Urologi':'UROLOGI','Ortopedi':'ORTOPEDI','Bedah Saraf':'BEDAH-SARAF','BTKV':'BTKV','Bedah Plastik':'BEDAH-PLASTIK','Bedah Onkologi':'ONKOLOGI'};

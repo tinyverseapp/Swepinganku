@@ -166,7 +166,7 @@ export function ControlsBar({
               <span>AI Impor Catatan</span>
             </button>
           )}
-          {onAddPatient && <button type="button" onClick={onAddPatient} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Tambah Pasien Baru"><UserPlus className="w-4 h-4 shrink-0" /><span>+ Tambah Pasien</span></button>}
+          {onAddPatient && <button type="button" onClick={onAddPatient} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Tambah Pasien Baru"><UserPlus className="w-4 h-4 shrink-0" /><span>Tambah Pasien</span></button>}
           <button type="button" onClick={onOpenWeekly} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Lihat Rekapitulasi Mingguan dan Ekspor Excel/CSV"><FileSpreadsheet className="w-4 h-4 text-emerald-100 shrink-0" /><span>Rekap Mingguan &amp; CSV</span></button>
         </div>
       </div>

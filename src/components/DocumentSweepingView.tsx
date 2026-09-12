@@ -2,17 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
-import { FileText, Copy, Printer, Check, Plus, ArrowLeft, MoreVertical, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, KeyRound, GitPullRequest, PanelLeftClose, Menu, Sparkles } from 'lucide-react';
+import { FileText, Copy, Printer, Check, Plus, ArrowLeft, MoreVertical, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, KeyRound, GitPullRequest, PanelLeftClose, Menu, Sparkles, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
 interface DocumentSweepingViewProps {
   patients: Patient[]; date: string; division: string; koasName: string; dpjps: string[]; allRooms: string[];
   onDateChange?: (newDate: string) => void; onBackToDashboard: () => void; onAddPatient: () => void;
   onEditPatient: (patient: Patient) => void; activeTeam?: DivisionTeam; onOpenTeamModal?: () => void;
-  onHandoverPatients?: () => void; onOpenAiImport?: () => void;
+  onHandoverPatients?: () => void; onOpenAiImport?: () => void; onDeleteAllPatients?: () => void;
 }
 
-export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
+export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport, onDeleteAllPatients }: DocumentSweepingViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [includeEmptyRooms, setIncludeEmptyRooms] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -62,6 +62,17 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
         {activeTeam && onOpenTeamModal && <button onClick={onOpenTeamModal} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 border border-blue-200 min-h-[36px]"><KeyRound className="w-3.5 h-3.5" />PIN: {activeTeam.teamCode}</button>}
         <button onClick={() => window.print()} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 min-h-[36px]"><Printer className="w-4 h-4" />Cetak</button>
         {onOpenAiImport && <button onClick={onOpenAiImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white min-h-[36px]"><Sparkles className="w-3.5 h-3.5" />AI Impor</button>}
+        {onDeleteAllPatients && patients.length > 0 && (
+          <button
+            type="button"
+            onClick={onDeleteAllPatients}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 min-h-[36px] transition-colors cursor-pointer"
+            title="Hapus semua pasien pada hari ini"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Hapus Semua</span>
+          </button>
+        )}
         <button onClick={onAddPatient} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white min-h-[36px]"><Plus className="w-4 h-4" />Tambah Pasien</button>
       </div>
     </header>

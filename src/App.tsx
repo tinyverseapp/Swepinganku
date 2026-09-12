@@ -7,13 +7,14 @@ import {
   saveKoasName,
   loadPatients,
   savePatients,
+  clearPatientsForDate,
   saveCurrentTeam,
   handoverYesterdayPatients,
   getStorageKey,
   isRemovedDoctor
 } from './utils/storage';
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
-import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore } from './lib/firestoreService';
+import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
@@ -23,6 +24,7 @@ import { PatientCard } from './components/PatientCard';
 import { PatientModal } from './components/PatientModal';
 import { MovePatientModal } from './components/MovePatientModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { DeleteAllConfirmModal } from './components/DeleteAllConfirmModal';
 import { ReportModal } from './components/ReportModal';
 import { WeeklyModal } from './components/WeeklyModal';
 import { DocumentSweepingView } from './components/DocumentSweepingView';
@@ -31,7 +33,7 @@ import { NextjsRepoModal } from './components/NextjsRepoModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AiImportModal } from './components/AiImportModal';
 import { TeamMembersPanel } from './components/TeamMembersPanel';
-import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles } from 'lucide-react';
+import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
 
 const EMPTY_TEAM: DivisionTeam = { teamCode: '', division: '', teamName: '', members: [] };
 function getInitialTeam(): DivisionTeam { return getSavedActiveTeam() || EMPTY_TEAM; }
@@ -50,6 +52,7 @@ export default function App() {
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [movingPatient, setMovingPatient] = useState<Patient | null>(null);
   const [deletingPatient, setDeletingPatient] = useState<Patient | null>(null);
+  const [deleteAllDayTarget, setDeleteAllDayTarget] = useState<{ date: string; dayName?: string; count: number } | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportMode, setReportMode] = useState<'dpjp' | 'all'>('dpjp');
   const [isWeeklyModalOpen, setIsWeeklyModalOpen] = useState(false);
@@ -102,6 +105,24 @@ export default function App() {
   const handleConfirmDelete = (patient: Patient) => {
     const updated = patients.filter((p) => p.id !== patient.id); setPatients(updated); savePatients(date, division, updated, activeTeam.teamCode); setDeletingPatient(null);
     if (activeTeam.teamCode) deletePatientFromFirestore({ ...patient, teamCode: activeTeam.teamCode, date }).then(() => showToast(`Data ${patient.name} dihapus dari Firebase.`)).catch((error) => showToast(`Gagal menghapus dari Firebase: ${error.message}`)); else showToast(`Data ${patient.name} telah dihapus.`);
+  };
+  const handleConfirmDeleteAllDay = async (targetDate: string) => {
+    if (!targetDate) return;
+    if (targetDate === date) {
+      setPatients([]);
+    }
+    clearPatientsForDate(targetDate, division, activeTeam.teamCode);
+
+    if (activeTeam.teamCode) {
+      try {
+        await deleteAllPatientsForDateFromFirestore(activeTeam.teamCode, targetDate);
+        showToast(`Semua pasien pada ${targetDate} berhasil dihapus dari Firebase.`);
+      } catch (error: any) {
+        showToast(`Data lokal dikosongkan, namun Firebase gagal: ${error?.message || 'kendala jaringan'}`);
+      }
+    } else {
+      showToast(`Semua pasien pada ${targetDate} berhasil dihapus.`);
+    }
   };
   const handleMovePatient = async (patient: Patient, targetDate: string) => {
     if (!targetDate || targetDate === date) return;
@@ -227,11 +248,36 @@ export default function App() {
     <Topbar koasName={koasName} onUpdateKoasName={handleUpdateKoasName} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} pageMode={pageMode} onPageModeChange={setPageMode} onOpenNextjsModal={() => setIsNextjsModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onOpenSettings={() => setIsSettingsModalOpen(true)} />
     <TeamMembersPanel />
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
-      {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleHandoverYesterday} onOpenAiImport={() => setIsAiImportModalOpen(true)} /> : <>
+      {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleHandoverYesterday} onOpenAiImport={() => setIsAiImportModalOpen(true)} onDeleteAllPatients={() => setDeleteAllDayTarget({ date, count: patients.length })} /> : <>
         <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleHandoverYesterday} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
-        <WeekDaysBar currentDate={date} division={division} currentPatientCount={patients.length} onSelectDate={handleDateChange} onCopyFromDay={handleCopyFromDay} teamCode={activeTeam.teamCode} />
-        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-xs space-y-3"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 flex-wrap"><span className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Users className="w-4 h-4 text-blue-600" /><span>Total {totalCount} Pasien</span></span>{selectedDpjpFilter !== 'all' && <><span className="text-slate-300">|</span><span className="text-xs text-blue-700 font-semibold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">{filteredPatients.length} pasien ({selectedDpjpFilter})</span></>}</div></div><div className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs"><span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" />Filter Dokter:</span><button type="button" onClick={() => setSelectedDpjpFilter('all')} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer ${selectedDpjpFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Semua Pasien ({patients.length})</button>{existingDpjps.map((d) => { const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length; return <button key={d} type="button" onClick={() => setSelectedDpjpFilter(d)} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer ${selectedDpjpFilter === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>{d.split(',')[0]} ({count})</button>; })}</div></div>
-        {filteredPatients.length === 0 ? <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-8 sm:p-12 text-center flex flex-col items-center justify-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3"><Users className="w-7 h-7" /></div><h3 className="text-base font-bold text-slate-800">{!activeTeam.teamCode ? 'Belum bergabung ke tim' : searchQuery || selectedDpjpFilter !== 'all' ? 'Tidak ada pasien yang sesuai filter' : `Belum ada pasien terdaftar untuk ${division}`}</h3><p className="text-xs text-slate-500 max-w-md mt-1 mb-5">{!activeTeam.teamCode ? 'Bergabunglah ke tim menggunakan PIN agar divisi dan data pasien tersedia.' : searchQuery || selectedDpjpFilter !== 'all' ? 'Coba ganti kata kunci pencarian atau pilih filter "Semua Pasien".' : 'Mulai sweeping dengan menambahkan pasien baru atau tarik daftar pasien dari hari sebelumnya.'}</p><div className="flex flex-wrap items-center justify-center gap-2.5"><button type="button" onClick={() => setIsTeamModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer"><UserPlus className="w-4 h-4" /><span>{activeTeam.teamCode ? 'Ganti / Masuk Tim' : 'Gabung Tim'}</span></button>{activeTeam.teamCode && <><button type="button" onClick={() => setIsAiImportModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-xs transition-colors"><Sparkles className="w-4 h-4 text-amber-300 animate-pulse" /><span>AI Impor Catatan</span></button><button type="button" onClick={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 font-bold text-xs rounded-xl cursor-pointer"><UserPlus className="w-4 h-4" /><span>+ Tambah Pasien Baru</span></button><button type="button" onClick={handleHandoverYesterday} className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl cursor-pointer"><GitPullRequest className="w-4 h-4 text-amber-600" /><span>Operan Pasien Kemarin</span></button></>}</div></div> : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">{filteredPatients.map((patient) => <PatientCard key={patient.id} patient={patient} isCompact={compactMode} onEdit={() => { setEditingPatient(patient); setIsPatientModalOpen(true); }} onDelete={() => setDeletingPatient(patient)} onQuickShare={() => handleQuickSharePatient(patient)} onMove={() => setMovingPatient(patient)} />)}</div>}
+        <WeekDaysBar currentDate={date} division={division} currentPatientCount={patients.length} onSelectDate={handleDateChange} onCopyFromDay={handleCopyFromDay} onDeleteAllDay={(dDate, dName, count) => setDeleteAllDayTarget({ date: dDate, dayName: dName, count })} teamCode={activeTeam.teamCode} />
+        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-blue-600" />
+                <span>Total {totalCount} Pasien</span>
+              </span>
+              {selectedDpjpFilter !== 'all' && <>
+                <span className="text-slate-300">|</span>
+                <span className="text-xs text-blue-700 font-semibold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">{filteredPatients.length} pasien ({selectedDpjpFilter})</span>
+              </>}
+            </div>
+            {totalCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setDeleteAllDayTarget({ date, count: totalCount })}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                title="Hapus semua pasien di hari ini"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Hapus Semua ({totalCount})</span>
+              </button>
+            )}
+          </div>
+          <div className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs"><span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" />Filter Dokter:</span><button type="button" onClick={() => setSelectedDpjpFilter('all')} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer ${selectedDpjpFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Semua Pasien ({patients.length})</button>{existingDpjps.map((d) => { const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length; return <button key={d} type="button" onClick={() => setSelectedDpjpFilter(d)} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer ${selectedDpjpFilter === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>{d.split(',')[0]} ({count})</button>; })}</div>
+        </div>
+        {filteredPatients.length === 0 ? <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-8 sm:p-12 text-center flex flex-col items-center justify-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3"><Users className="w-7 h-7" /></div><h3 className="text-base font-bold text-slate-800">{!activeTeam.teamCode ? 'Belum bergabung ke tim' : searchQuery || selectedDpjpFilter !== 'all' ? 'Tidak ada pasien yang sesuai filter' : `Belum ada pasien terdaftar untuk ${division}`}</h3><p className="text-xs text-slate-500 max-w-md mt-1 mb-5">{!activeTeam.teamCode ? 'Bergabunglah ke tim menggunakan PIN agar divisi dan data pasien tersedia.' : searchQuery || selectedDpjpFilter !== 'all' ? 'Coba ganti kata kunci pencarian atau pilih filter "Semua Pasien".' : 'Mulai sweeping dengan menambahkan pasien baru atau tarik daftar pasien dari hari sebelumnya.'}</p><div className="flex flex-wrap items-center justify-center gap-2.5"><button type="button" onClick={() => setIsTeamModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer"><UserPlus className="w-4 h-4" /><span>{activeTeam.teamCode ? 'Ganti / Masuk Tim' : 'Gabung Tim'}</span></button>{activeTeam.teamCode && <><button type="button" onClick={() => setIsAiImportModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-xs transition-colors"><Sparkles className="w-4 h-4 text-amber-300 animate-pulse" /><span>AI Impor Catatan</span></button><button type="button" onClick={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 font-bold text-xs rounded-xl cursor-pointer"><UserPlus className="w-4 h-4" /><span>Tambah Pasien Baru</span></button><button type="button" onClick={handleHandoverYesterday} className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl cursor-pointer"><GitPullRequest className="w-4 h-4 text-amber-600" /><span>Operan Pasien Kemarin</span></button></>}</div></div> : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">{filteredPatients.map((patient) => <PatientCard key={patient.id} patient={patient} isCompact={compactMode} onEdit={() => { setEditingPatient(patient); setIsPatientModalOpen(true); }} onDelete={() => setDeletingPatient(patient)} onQuickShare={() => handleQuickSharePatient(patient)} onMove={() => setMovingPatient(patient)} />)}</div>}
       </>}
     </main>
     {toastMessage && <div className="fixed bottom-5 right-5 z-50 animate-in fade-in slide-in-from-bottom-5"><div className="bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /><span>{toastMessage}</span></div></div>}
@@ -239,6 +285,7 @@ export default function App() {
     <MovePatientModal patient={movingPatient} currentDate={date} onClose={() => setMovingPatient(null)} onConfirm={(targetDate) => movingPatient && handleMovePatient(movingPatient, targetDate)} />
     <AiImportModal isOpen={isAiImportModalOpen} onClose={() => setIsAiImportModalOpen(false)} division={division} date={date} teamCode={activeTeam.teamCode} knownRooms={DEFAULT_ROOMS} knownDpjps={existingDpjps} existingPatients={patients} onImportPatients={handleImportAiPatients} />
     <DeleteConfirmModal patient={deletingPatient} division={division} date={date} onClose={() => setDeletingPatient(null)} onConfirm={handleConfirmDelete} />
+    <DeleteAllConfirmModal target={deleteAllDayTarget} division={division} onClose={() => setDeleteAllDayTarget(null)} onConfirm={handleConfirmDeleteAllDay} />
     <ReportModal isOpen={isReportModalOpen} mode={reportMode} date={date} division={division} koasName={koasName} selectedDpjp={selectedDpjpFilter !== 'all' ? selectedDpjpFilter : consultants[0] || ''} patients={patients} onClose={() => setIsReportModalOpen(false)} />
     <WeeklyModal isOpen={isWeeklyModalOpen} currentDate={date} division={division} teamCode={activeTeam.teamCode} onClose={() => setIsWeeklyModalOpen(false)} />
     <TeamSwitchModal isOpen={isTeamModalOpen} onClose={() => setIsTeamModalOpen(false)} currentTeam={activeTeam} currentDivision={division} koasName={koasName} onSwitchTeam={handleSwitchTeam} />

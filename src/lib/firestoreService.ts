@@ -351,6 +351,21 @@ export async function deletePatientFromFirestore(patient: Patient & { teamCode?:
   await deleteDoc(doc(db, COLLECTION, makeDocId(patient)));
 }
 
+export async function deleteAllPatientsForDateFromFirestore(teamCode: string, date: string): Promise<void> {
+  if (!teamCode || !date) return;
+  const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => {
+    const data = d.data() as FirestorePatientRecord;
+    if (!isWeeklyHistory(data)) {
+      batch.delete(d.ref);
+    }
+  });
+  await batch.commit();
+}
+
 export async function upsertPatientToFirestore(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: new Date().toISOString() });

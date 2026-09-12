@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { getWeekDays, shiftDateByDays, getStorageKey, today, formatIndonesianDate, isRemovedDoctor } from '../utils/storage';
 import { subscribeToTeamAllPatients } from '../lib/firestoreService';
-import { ChevronLeft, ChevronRight, Calendar, Copy, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Copy, CheckCircle2, ArrowRight, Trash2 } from 'lucide-react';
 import { useDivisionColors } from '../utils/divisionColors';
 
 interface WeekDaysBarProps {
@@ -10,6 +10,7 @@ interface WeekDaysBarProps {
   currentPatientCount: number;
   onSelectDate: (date: string) => void;
   onCopyFromDay?: (fromDate: string, dayName: string) => void;
+  onDeleteAllDay?: (date: string, dayName: string, count: number) => void;
   teamCode?: string;
 }
 
@@ -19,6 +20,7 @@ export function WeekDaysBar({
   currentPatientCount,
   onSelectDate,
   onCopyFromDay,
+  onDeleteAllDay,
   teamCode
 }: WeekDaysBarProps) {
   const { activeTheme } = useDivisionColors(division);
@@ -232,51 +234,72 @@ export function WeekDaysBar({
           const isSelected = w.date === currentDate;
 
           return (
-            <button
-              key={w.date}
-              type="button"
-              onClick={() => onSelectDate(w.date)}
-              className={`flex flex-col items-center justify-between p-1 sm:p-2.5 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden min-h-[64px] ${
-                isSelected
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
-                  : w.isToday
-                  ? 'bg-emerald-50/60 border-emerald-300 text-slate-800 hover:bg-emerald-100/50'
-                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300'
-              }`}
-            >
-              {/* Today dot */}
-              {w.isToday && !isSelected && (
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Hari ini" />
-              )}
-
-              {/* Day Name (Senin, Selasa, etc.) */}
-              <span className={`text-[10px] sm:text-xs font-bold leading-tight ${
-                isSelected ? 'text-white' : 'text-slate-800'
-              }`}>
-                <span className="hidden sm:inline">{w.dayName}</span>
-                <span className="sm:hidden">{w.shortName}</span>
-              </span>
-
-              {/* Date (e.g., 07 Sep) */}
-              <span className={`text-[9px] sm:text-[11px] font-medium leading-none my-0.5 ${
-                isSelected ? 'text-white/85' : 'text-slate-500'
-              }`}>
-                {w.dayOfMonth} <span className="hidden sm:inline">{w.monthName}</span>
-              </span>
-
-              {/* Patient Count Badge */}
-              <span
-                className={`text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.2 rounded-full mt-0.5 ${
+            <div key={w.date} className="relative group/day flex">
+              <button
+                type="button"
+                onClick={() => onSelectDate(w.date)}
+                className={`w-full flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden min-h-[66px] sm:min-h-[70px] ${
                   isSelected
-                    ? 'bg-white/20 text-white'
-                    : count > 0
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-slate-200/60 text-slate-500'
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
+                    : w.isToday
+                    ? 'bg-emerald-50/60 border-emerald-300 text-slate-800 hover:bg-emerald-100/50'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300'
                 }`}
               >
-                {count}<span className="hidden sm:inline"> pas</span>
-              </span>
-            </button>
+                {/* Today dot */}
+                {w.isToday && !isSelected && (
+                  <span className="absolute top-1 left-1 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Hari ini" />
+                )}
+
+                {/* Day Name (Senin, Selasa, etc.) */}
+                <span className={`text-[10px] sm:text-xs font-bold leading-tight ${
+                  isSelected ? 'text-white' : 'text-slate-800'
+                }`}>
+                  <span className="hidden sm:inline">{w.dayName}</span>
+                  <span className="sm:hidden">{w.shortName}</span>
+                </span>
+
+                {/* Date (e.g., 07 Sep) */}
+                <span className={`text-[9px] sm:text-[11px] font-medium leading-none my-0.5 ${
+                  isSelected ? 'text-white/85' : 'text-slate-500'
+                }`}>
+                  {w.dayOfMonth} <span className="hidden sm:inline">{w.monthName}</span>
+                </span>
+
+                {/* Patient Count Badge */}
+                <span
+                  className={`text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.2 rounded-full mt-0.5 ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : count > 0
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-slate-200/60 text-slate-500'
+                  }`}
+                >
+                  {count}<span className="hidden sm:inline"> pas</span>
+                </span>
+              </button>
+
+              {/* Tombol Hapus Semua Pasien di hari ini */}
+              {count > 0 && onDeleteAllDay && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteAllDay(w.date, w.dayName, count);
+                  }}
+                  className={`absolute top-0.5 right-0.5 p-1 rounded-md transition-all cursor-pointer z-10 opacity-70 hover:opacity-100 ${
+                    isSelected
+                      ? 'text-white/80 hover:text-white hover:bg-white/20'
+                      : 'text-rose-500 hover:text-rose-700 hover:bg-rose-50'
+                  }`}
+                  title={`Hapus semua (${count}) pasien di hari ${w.dayName}`}
+                  aria-label={`Hapus semua pasien di hari ${w.dayName}`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
