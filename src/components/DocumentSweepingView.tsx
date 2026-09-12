@@ -92,16 +92,16 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
             {sortedRooms.map(roomName => {
               const roomPatients = currentTabPatients.filter(p => normalizeRoomName(p.room).toLowerCase() === roomName.toLowerCase());
               if (!roomPatients.length) return includeEmptyRooms ? <div key={roomName} className="space-y-1.5"><div className="font-bold">*{roomName.toUpperCase()} (0)*</div><div className="text-slate-400 tracking-widest font-mono text-xs">____________________________________________________</div></div> : null;
-              return <div key={roomName} className="space-y-2"><div className="font-bold flex items-center justify-between"><span>*{roomName.toUpperCase()} ({roomPatients.length})*</span></div><ol className="space-y-3 list-none pl-0">{roomPatients.map((patient, idx) => {
+              return <div key={roomName} className="space-y-2"><div className="font-bold flex items-center justify-between"><span>*{roomName.toUpperCase()} ({roomPatients.length})*</span></div><ol className="space-y-1 list-none pl-0">{roomPatients.map((patient, idx) => {
                 const bedOrKamar = formatKamarOrBed(patient.room, patient.kamar);
                 const formattedName = formatPatientNameWithHonorific(patient.name, patient.age, patient.jk);
                 const role = getRoleLabel(patient);
                 const doctorName = patient.dpjp || '-';
                 const mainDpjp = patient.supervisingDpjp || '';
                 return <li key={patient.id} className="group p-2 -mx-2 rounded-lg hover:bg-blue-50/60 flex items-start justify-between gap-3">
-                  <div className="flex-1">
+                  <div className="flex-1 leading-tight">
                     <div><span className="font-semibold mr-2">{idx + 1}.</span><span className="font-medium">{bedOrKamar}</span><span className="text-slate-400 mx-1.5">/</span><span className="font-bold">{formattedName}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.jk || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.age || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.dx || '-'}</span></div>
-                    <div className="mt-1.5 pl-0 text-blue-700 font-medium leading-6">
+                    <div className="mt-0 pl-0 text-blue-700 font-medium leading-tight">
                       {role === 'DPJP' ? <div><b>DPJP:</b> {doctorName}</div> : <><div><b>DPJP:</b> {mainDpjp || '-'}</div><div><b>{role}:</b> {doctorName}</div></>}
                     </div>
                   </div>
