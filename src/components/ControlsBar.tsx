@@ -8,12 +8,12 @@ import {
   GitPullRequest,
   UserPlus,
   Sparkles,
-  Sparkle,
   FileSpreadsheet
 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 import { getJoinedDivisions, getSavedActiveTeam } from '../utils/teamRegistry';
 import { useDivisionColors } from '../utils/divisionColors';
+import { AiSparkleIcon } from './AiSparkleIcon';
 
 interface ControlsBarProps {
   date: string;
@@ -159,10 +159,10 @@ export function ControlsBar({
             <button
               type="button"
               onClick={onOpenAiImport}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
+              className="group flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
               title="Salin & Tempel Catatan Teks untuk Diubah Menjadi Pasien Otomatis oleh AI"
             >
-              <Sparkle className="w-3.5 h-3.5 text-teal-300 shrink-0" />
+              <AiSparkleIcon size={16} className="shrink-0 transition-transform duration-200 group-hover:scale-115" />
               <span>AI Impor Catatan</span>
             </button>
           )}
