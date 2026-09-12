@@ -27,7 +27,7 @@ export const PEDIATRIC_CONSULTANTS: string[] = [
 ];
 
 /** Master database ruangan dengan urutan tetap resmi. */
-export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia'];
+export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Mawar','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia','Tulip'];
 export const DEFAULT_ROOMS = MASTER_ROOMS;
 export const BED_ONLY_ROOMS: string[] = ['NICU','PICU','ICCU','ICU'];
 export function isBedRoom(roomName?: string): boolean { if (!roomName) return false; const upper = roomName.trim().toUpperCase(); return BED_ONLY_ROOMS.some((r) => r.toUpperCase() === upper); }
