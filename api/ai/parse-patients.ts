@@ -2,6 +2,7 @@ const recentRequests = new Map<string, number[]>();
 const MAX_REQUESTS_PER_MINUTE = 10;
 const MAX_TEXT_LENGTH = 30000;
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const ADMIN_EMAIL = "m.hafidzuddin.s@gmail.com";
 
 function getAllowedOrigin(req: any): string {
   const origin = String(req.headers?.origin || "");
@@ -24,6 +25,10 @@ async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; em
   const user = data?.users?.[0];
   if (!user?.localId) throw new Error("Sesi Firebase tidak valid.");
   return { uid: user.localId, email: user.email };
+}
+
+function isAdmin(identity: { email?: string }): boolean {
+  return String(identity.email || "").trim().toLowerCase() === ADMIN_EMAIL;
 }
 
 function allowRate(uid: string): boolean {
@@ -140,7 +145,7 @@ export default async function handler(req: any, res: any) {
     if (!token) return res.status(401).json({ success: false, error: "Autentikasi diperlukan untuk menggunakan AI." });
 
     const identity = await verifyFirebaseIdToken(token);
-    if (!allowRate(identity.uid)) {
+    if (!isAdmin(identity) && !allowRate(identity.uid)) {
       return res.status(429).json({ success: false, error: "Terlalu banyak permintaan AI. Silakan tunggu sekitar 1 menit lalu coba lagi." });
     }
 
