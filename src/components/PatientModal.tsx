@@ -41,7 +41,7 @@ export function PatientModal({
   const [customRoomName, setCustomRoomName] = useState('');
   const [kamar, setKamar] = useState('');
   const [name, setName] = useState('');
-  const [jk, setJk] = useState<'L' | 'P'>('L');
+  const [jk, setJk] = useState<'L' | 'P' | ''>('');
   const [age, setAge] = useState('');
   const [rm, setRm] = useState('');
   const [dx, setDx] = useState('');
@@ -69,7 +69,7 @@ export function PatientModal({
       }
       setKamar(initialData.kamar || '');
       setName(initialData.name || '');
-      setJk(initialData.jk || 'L');
+      setJk(initialData.jk || '');
       setAge(initialData.age || '');
       setRm(initialData.rm || '');
       setDx(initialData.dx || '');
@@ -82,7 +82,7 @@ export function PatientModal({
       setCustomRoomName('');
       setKamar('');
       setName('');
-      setJk('L');
+      setJk('');
       setAge('');
       setRm('');
       setDx('');

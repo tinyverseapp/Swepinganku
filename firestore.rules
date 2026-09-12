@@ -10,7 +10,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'name', 'jk', 'rm', 'room', 'dpjp', 'date', 'division'])
         && data.id is string && data.id.size() > 0 && data.id.size() <= 128
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
-        && (data.jk == 'L' || data.jk == 'P')
+        && (data.jk == 'L' || data.jk == 'P' || data.jk == '')
         && (!('age' in data) || (data.age is string && data.age.size() <= 50))
         && data.rm is string && data.rm.size() <= 50
         && data.room is string && data.room.size() <= 100
@@ -20,7 +20,9 @@ service cloud.firestore {
         && data.date is string && data.date.size() <= 20
         && data.division is string && data.division.size() <= 100
         && (!('teamCode' in data) || (data.teamCode is string && data.teamCode.size() <= 50))
-        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50))
+        && (!('doctorRole' in data) || data.doctorRole == 'DPJP' || data.doctorRole == 'RABER' || data.doctorRole == 'KONSUL')
+        && (!('supervisingDpjp' in data) || (data.supervisingDpjp is string && data.supervisingDpjp.size() <= 200));
     }
 
     function isValidTeam(data) {
@@ -37,19 +39,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'm.hafidzuddin.s@gmail.com';
+    }
+
+    function isTeamMember(teamCode) {
+      return request.auth != null && exists(/databases/$(database)/documents/teamMembers/$(teamCode)/members/$(request.auth.uid));
+    }
+
     match /sweepinganku/{patientId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data);
-      allow update: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data);
-      allow delete: if request.auth != null && isValidId(patientId);
+      allow read: if request.auth != null && (isTeamMember(resource.data.teamCode) || isAdmin());
+      allow create: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data) && (isTeamMember(request.resource.data.teamCode) || isAdmin());
+      allow update: if request.auth != null && isValidId(patientId) && isValidSweepingPatient(request.resource.data) && (isTeamMember(request.resource.data.teamCode) || isAdmin());
+      allow delete: if request.auth != null && isValidId(patientId) && (isTeamMember(resource.data.teamCode) || isAdmin());
     }
 
     // Permanent weekly census/history. History may be created or updated by
     // authenticated users, but is never deleted by the application.
     match /sweepingankuWeekly/{historyId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && isValidId(historyId);
-      allow delete: if false;
+      allow read, write: if false;
     }
 
     match /teams/{teamCode} {

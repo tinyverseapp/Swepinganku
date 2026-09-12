@@ -44,6 +44,12 @@ export interface WeeklyHistoryRecord extends Patient {
 
 function makeDocId(patient: Patient & { teamCode?: string; date?: string }): string {
   const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
+  // Patient ID is immutable; RM is mutable clinical data and must never be the document identity.
+  return `${safe(patient.teamCode || 'NOTEAM')}_${safe(patient.date)}_${safe(patient.id)}`;
+}
+
+function makeLegacyDocId(patient: Patient & { teamCode?: string; date?: string }): string {
+  const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-.:]/g, '_').substring(0, 40);
   return `${safe(patient.teamCode || 'NOTEAM')}_${safe(patient.date)}_${safe(patient.rm || patient.id)}`;
 }
 
@@ -97,7 +103,8 @@ async function recordWeeklyHistory(patient: Patient, teamCode: string, date: str
   if (!teamCode || !date || !patient.rm) return;
   const payload = historyPayload(patient, teamCode, date);
   const ref = doc(db, COLLECTION, weeklyDocId(teamCode, payload.weekStart, patient.rm));
-  await setDoc(ref, payload, { merge: true });
+  const { days: _days, ...summary } = payload;
+  await setDoc(ref, { ...summary, [`days.${date}`]: { patient: { ...patient, teamCode, date }, recordedAt: summary.updatedAt } }, { merge: true });
 }
 
 /** Save the current patient list while preserving historical occurrences. */
@@ -109,9 +116,13 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
     const batch = writeBatch(db);
 
     // Never delete weekly-history documents when replacing a daily list.
+    const desiredIds = new Set(patients.map((p) => makeDocId({ ...p, teamCode, date })));
     existing.docs.forEach((d) => {
       const data = d.data() as FirestorePatientRecord;
-      if (!isWeeklyHistory(data)) batch.delete(d.ref);
+      if (isWeeklyHistory(data)) return;
+      // Delete only stale records for this team/date; do not replace another user's concurrent patients.
+      const samePatient = patients.some((p) => (p.id && data.id === p.id) || (p.rm && data.rm && p.rm.trim().toLowerCase() === data.rm.trim().toLowerCase()));
+      if (samePatient && !desiredIds.has(d.id)) batch.delete(d.ref);
     });
 
     const recordedAt = new Date().toISOString();
@@ -121,6 +132,12 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
     patients.forEach((p) => {
       const normalized = { ...p, teamCode, date, updatedAt: recordedAt };
       batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
+      const legacyId = makeLegacyDocId(normalized);
+      const stableId = makeDocId(normalized);
+      if (legacyId !== stableId) {
+        const legacyRef = doc(db, COLLECTION, legacyId);
+        batch.delete(legacyRef);
+      }
       if (normalized.rm) {
         const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
         batch.set(historyRef, {
@@ -325,6 +342,9 @@ export async function upsertPatientToFirestore(patient: Patient, teamCode: strin
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   const normalized = { ...patient, teamCode, date, updatedAt: new Date().toISOString() };
   await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);
+  const legacyId = makeLegacyDocId(normalized);
+  const stableId = makeDocId(normalized);
+  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));
   await recordWeeklyHistory(normalized, teamCode, date);
 }
 
@@ -348,6 +368,9 @@ export async function movePatientToDateFirestore(patient: Patient, teamCode: str
 
   const batch = writeBatch(db);
   batch.delete(doc(db, COLLECTION, makeDocId({ ...patient, teamCode, date: fromDate })));
+  const legacyFromId = makeLegacyDocId({ ...patient, teamCode, date: fromDate });
+  const stableFromId = makeDocId({ ...patient, teamCode, date: fromDate });
+  if (legacyFromId !== stableFromId) batch.delete(doc(db, COLLECTION, legacyFromId));
   batch.set(doc(db, COLLECTION, makeDocId(movedPatient)), movedPatient);
   await batch.commit();
 }
