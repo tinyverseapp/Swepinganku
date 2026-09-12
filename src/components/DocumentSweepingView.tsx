@@ -43,7 +43,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
   const sortedRooms = useMemo(() => {
     const base = allRooms && allRooms.length ? allRooms : MASTER_ROOMS;
     const current = Array.from(new Set(currentTabPatients.map(p => normalizeRoomName(p.room))));
-    const custom = current.filter(r => !base.some(b => b.toLowerCase() === r.toLowerCase()));
+    const custom = current.filter(r => !base.some((b: string) => b.toLowerCase() === r.toLowerCase()));
     return [...base, ...custom];
   }, [allRooms, currentTabPatients]);
 
