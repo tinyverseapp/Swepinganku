@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { Patient } from '../types';
 import {
   MASTER_ROOMS,
+  PEDIATRIC_CONSULTANTS,
   isBedRoom,
   normalizeRoomName,
   formatKamarOrBed,
@@ -93,6 +94,7 @@ export function PatientModal({
   const currentRoomName = isCustomRoom ? (customRoomName.trim() || 'Ruangan Khusus') : selectedRoom;
   const isCurrentBed = isBedRoom(currentRoomName);
   const needsSupervisingDpjp = doctorRole === 'RABER' || doctorRole === 'KONSUL';
+  const supervisingDpjpOptions = Array.from(new Set([...(existingDpjps || []), ...PEDIATRIC_CONSULTANTS]));
 
   const handleRoomSelectChange = (val: string) => {
     if (val === '__CUSTOM__') {
@@ -189,17 +191,23 @@ export function PatientModal({
                     list="supervisingDpjpDatalist"
                     value={supervisingDpjp}
                     onChange={(e) => setSupervisingDpjp(e.target.value)}
-                    placeholder="Contoh: dr. Ahmad Tobroni, Sp.B(K)BD"
+                    placeholder="Pilih dokter DPJP, misalnya dokter anak atau dokter bedah"
                     className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                   />
                   <p className="text-[10px] text-amber-800 mt-1">Wajib diisi karena dokter di atas berperan sebagai <b>{doctorRole === 'RABER' ? 'Raber' : 'Konsul'}</b>, bukan DPJP utama pasien.</p>
-                  <datalist id="supervisingDpjpDatalist">{(existingDpjps || []).map((d) => <option key={`supervising-${d}`} value={d} />)}</datalist>
+                  <datalist id="supervisingDpjpDatalist">{supervisingDpjpOptions.map((d) => <option key={`supervising-${d}`} value={d} />)}</datalist>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-slate-600 font-semibold">Dokter Anak:</span>
+                    {PEDIATRIC_CONSULTANTS.map((c) => (
+                      <button key={`pediatric-${c}`} type="button" onClick={() => setSupervisingDpjp(c)} className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md px-1.5 py-0.5 font-semibold transition-colors cursor-pointer" title={`Pilih ${c} sebagai DPJP utama`}>+ {c.replace(/^dr\.\s*/i, '').split(',')[0]}</button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1"><label className="font-bold text-slate-700">Ruangan Rawat Inap *</label><span className="text-[10px] font-semibold text-slate-500">Master DB (17 Ruangan)</span></div>
+              <div className="flex items-center justify-between mb-1"><label className="font-bold text-slate-700">Ruangan Rawat Inap *</label><span className="text-[10px] font-semibold text-slate-500">Master DB (19 Ruangan)</span></div>
               <select value={isCustomRoom ? '__CUSTOM__' : selectedRoom} onChange={(e) => handleRoomSelectChange(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
                 <optgroup label="Master Database Ruangan (Urutan Tetap)">{MASTER_ROOMS.map((r) => <option key={r} value={r}>{r} {isBedRoom(r) ? '→ Format Bed' : ''}</option>)}</optgroup>
                 <optgroup label="Pilihan Kasus Khusus"><option value="__CUSTOM__">+ Input Ruangan Kustom (Lainnya)...</option></optgroup>
