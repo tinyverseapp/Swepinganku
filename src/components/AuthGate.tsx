@@ -12,8 +12,9 @@ import {
   signInWithRedirect,
   updateProfile,
 } from 'firebase/auth';
-import { LogIn, Mail, LockKeyhole, ShieldCheck, Stethoscope, UserPlus, UserRound } from 'lucide-react';
+import { LogIn, Mail, LockKeyhole, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
 import { auth } from '../lib/firebase';
+import { BrandLogoIcon } from './BrandLogo';
 
 interface AuthGateProps { children: ReactNode; }
 
@@ -121,7 +122,9 @@ export function AuthGate({ children }: AuthGateProps) {
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-slate-500">
-        <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg animate-pulse"><Stethoscope className="w-6 h-6" /></div>
+        <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 p-2 flex items-center justify-center shadow-md animate-pulse">
+          <BrandLogoIcon size={32} />
+        </div>
         <span className="text-sm font-medium">Memeriksa sesi login...</span>
       </div>
     </div>
@@ -134,9 +137,15 @@ export function AuthGate({ children }: AuthGateProps) {
         <section className="w-full max-w-md">
           <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden">
             <div className="px-6 sm:px-8 pt-8 pb-5 text-center">
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-200"><Stethoscope className="w-7 h-7" /></div>
-              <h1 className="mt-5 text-2xl font-extrabold text-slate-900">Swepinganku</h1>
-              <p className="mt-1.5 text-sm text-slate-500">{isRegister ? 'Buat akun untuk mulai menggunakan Swepinganku.' : 'Silakan login untuk mengakses data sweeping.'}</p>
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-50 to-white border border-slate-200/90 p-2.5 flex items-center justify-center shadow-md shadow-slate-200/50">
+                <BrandLogoIcon size={42} />
+              </div>
+              <h1 className="mt-5 text-2xl font-extrabold text-slate-900 tracking-tight">
+                <span>Sweping</span>
+                <span className="text-teal-600">anku</span>
+              </h1>
+              <p className="mt-1 text-xs font-semibold text-slate-400 tracking-wider uppercase">Surgical Patient Monitoring</p>
+              <p className="mt-2 text-sm text-slate-500">{isRegister ? 'Buat akun untuk mulai menggunakan Swepinganku.' : 'Silakan login untuk mengakses data sweeping.'}</p>
             </div>
             <div className="px-6 sm:px-8 pb-8">
               <div className="grid grid-cols-2 p-1 mb-5 rounded-xl bg-slate-100 border border-slate-200">

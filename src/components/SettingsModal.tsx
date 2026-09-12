@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, X, KeyRound, ArrowRight, Palette, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { Settings, X, KeyRound, ArrowRight, Palette, RotateCcw, Check, Sparkles, Download, ShieldCheck } from 'lucide-react';
 import { DivisionTeam } from '../types';
 import { DIVISIONS } from '../data/constants';
 import {
@@ -8,6 +8,7 @@ import {
   useDivisionColors,
   getDivisionColorTheme
 } from '../utils/divisionColors';
+import { BrandLogoIcon } from './BrandLogo';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -210,6 +211,55 @@ export function SettingsModal({
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Brand Identity & Logo SVG section */}
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50/70 via-white to-teal-50/30 p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white border border-slate-200/90 p-1 flex items-center justify-center shadow-xs">
+                  <BrandLogoIcon size={24} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Logo Identitas Swepinganku</h4>
+                  <p className="text-[11px] text-slate-500">Vector SVG presisi medis &amp; SaaS kesehatan</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/logo.svg"
+                  download="swepinganku-logo.svg"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Logo Horizontal (SVG)</span>
+                </a>
+                <a
+                  href="/logo-icon.svg"
+                  download="swepinganku-icon.svg"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Icon Saja (SVG)</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="p-3 rounded-lg bg-white border border-slate-200 flex items-center justify-center min-h-[64px]">
+                <img src="/logo.svg" alt="Swepinganku Logo Horizontal" className="h-9 w-auto object-contain" />
+              </div>
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center min-h-[64px] gap-3">
+                <BrandLogoIcon size={32} />
+                <div className="text-left">
+                  <div className="text-sm font-extrabold text-white leading-tight tracking-tight">
+                    <span>Sweping</span>
+                    <span className="text-teal-400">anku</span>
+                  </div>
+                  <span className="text-[9px] font-semibold text-slate-400 tracking-wider uppercase">Mode Gelap / Presentasi</span>
+                </div>
+              </div>
             </div>
           </div>
 

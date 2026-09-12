@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stethoscope, FileText, LayoutGrid, Settings, LogOut, UserRound, X, Edit2, ShieldCheck } from 'lucide-react';
+import { FileText, LayoutGrid, Settings, LogOut, UserRound, X, Edit2, ShieldCheck } from 'lucide-react';
 import { PageMode, DivisionTeam } from '../types';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged, signOut, updateProfile, User } from 'firebase/auth';
 import { useDivisionColors } from '../utils/divisionColors';
 import { isAdmin } from '../lib/admin';
+import { BrandLogoIcon } from './BrandLogo';
 
 interface TopbarProps {
   koasName: string;
@@ -71,12 +72,15 @@ export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onP
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
-            <Stethoscope className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-slate-50 to-white border border-slate-200/90 p-1.5 flex items-center justify-center shadow-2xs shrink-0">
+            <BrandLogoIcon className="w-full h-full" size={26} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-base sm:text-lg text-slate-900 leading-tight">Swepinganku</span>
+              <span className="font-extrabold text-base sm:text-lg text-slate-900 leading-tight">
+                <span>Sweping</span>
+                <span className="text-teal-600">anku</span>
+              </span>
               {activeTeam?.division && (
                 <span className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors ${activeTheme.badge}`}>
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: activeTheme.hex }} />
