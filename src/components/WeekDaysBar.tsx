@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { getWeekDays, shiftDateByDays, getStorageKey, today, formatIndonesianDate, isRemovedDoctor } from '../utils/storage';
 import { subscribeToTeamAllPatients } from '../lib/firestoreService';
-import { ChevronLeft, ChevronRight, Calendar, Copy, CheckCircle2, ArrowRight, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Copy, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useDivisionColors } from '../utils/divisionColors';
 
 interface WeekDaysBarProps {
@@ -279,26 +279,6 @@ export function WeekDaysBar({
                   {count}<span className="hidden sm:inline"> pas</span>
                 </span>
               </button>
-
-              {/* Tombol Hapus Semua Pasien di hari ini */}
-              {count > 0 && onDeleteAllDay && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteAllDay(w.date, w.dayName, count);
-                  }}
-                  className={`absolute top-0.5 right-0.5 p-1 rounded-md transition-all cursor-pointer z-10 opacity-70 hover:opacity-100 ${
-                    isSelected
-                      ? 'text-white/80 hover:text-white hover:bg-white/20'
-                      : 'text-rose-500 hover:text-rose-700 hover:bg-rose-50'
-                  }`}
-                  title={`Hapus semua (${count}) pasien di hari ${w.dayName}`}
-                  aria-label={`Hapus semua pasien di hari ${w.dayName}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
             </div>
           );
         })}
