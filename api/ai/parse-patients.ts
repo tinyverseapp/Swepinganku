@@ -48,9 +48,7 @@ export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
 
   if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed. Gunakan metode POST." });
-  }
+  if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed. Gunakan metode POST." });
 
   try {
     const authorization = String(req.headers?.authorization || "");
@@ -62,42 +60,76 @@ export default async function handler(req: any, res: any) {
       return res.status(429).json({ success: false, error: "Terlalu banyak permintaan AI. Silakan tunggu sekitar 1 menit lalu coba lagi." });
     }
 
-    const { text, division, knownRooms, knownDpjps } = req.body || {};
+    const { text, division, knownRooms, knownDpjps, knownPediatricDpjps } = req.body || {};
     if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ success: false, error: "Teks catatan pasien tidak boleh kosong." });
     }
     if (text.length > MAX_TEXT_LENGTH) {
-      return res.status(413).json({ success: false, error: `Teks terlalu panjang. Maksimal ${MAX_TEXT_LENGTH.toLocaleString('id-ID')} karakter per permintaan.` });
+      return res.status(413).json({ success: false, error: `Teks terlalu panjang. Maksimal ${MAX_TEXT_LENGTH.toLocaleString("id-ID")} karakter per permintaan.` });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ success: false, error: "GEMINI_API_KEY belum disetel di Vercel Environment Variables." });
-    }
+    if (!apiKey) return res.status(500).json({ success: false, error: "GEMINI_API_KEY belum disetel di Vercel Environment Variables." });
 
     const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { "User-Agent": "swepinganku-ai" } } });
+    const surgicalDoctors = Array.isArray(knownDpjps) ? knownDpjps.filter(Boolean) : [];
+    const pediatricDoctors = Array.isArray(knownPediatricDpjps) ? knownPediatricDpjps.filter(Boolean) : [];
 
-    const prompt = `Anda adalah asisten ekstraksi data klinis untuk koas bedah.
-Tugas Anda HANYA mengekstrak informasi yang benar-benar tertulis pada catatan. Jangan mengarang, menyimpulkan fakta yang tidak didukung, atau mengisi nilai kosong dengan tebakan.
+    const prompt = `Anda adalah asisten ekstraksi data klinis untuk aplikasi sweeping pasien stase bedah. Anda harus memahami hubungan tanggung jawab dokter, bukan sekadar mengenali nama spesialis.
 
-DIVISI STASE AKTIF: ${division || 'Bedah'}
+KONSEP KLINIS WAJIB:
+- DPJP = Dokter Penanggung Jawab Pelayanan. Ini adalah dokter utama yang bertanggung jawab atas pelayanan pasien. Jika catatan menyebut "DPJP", "DPJP utama", "dokter penanggung jawab", atau padanan yang jelas, dokter tersebut adalah DPJP.
+- RABER = Rawat Bersama. Dokter dari bidang lain ikut merawat pasien bersama DPJP utama. Dokter RABER BUKAN DPJP utama hanya karena ia dokter bedah/spesialis yang sedang menangani masalahnya.
+- KONSUL = dokter yang dimintai konsultasi. Dokter konsulen BUKAN DPJP utama kecuali teks secara eksplisit menyatakan ia juga DPJP.
+- Untuk RABER/KONSUL, field dpjp berisi NAMA DOKTER YANG BERPERAN SEBAGAI RABER/KONSUL (dokter bedah pada aplikasi), doctorRole berisi perannya, dan supervisingDpjp berisi DPJP utama.
+- Untuk DPJP, field dpjp berisi dokter DPJP dan supervisingDpjp harus kosong.
+- Spesialisasi TIDAK menentukan peran. Dokter anak bisa menjadi DPJP. Dokter bedah anak bisa menjadi RABER atau KONSUL. Jangan pernah mengubah RABER/KONSUL menjadi DPJP hanya karena dokter tersebut dari divisi aktif.
+
+CONTOH WAJIB:
+1) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. RABER: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="RABER", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
+2) "DPJP dokter anak, rawat bersama dengan dr. Santi Rini Sp.BA" => dokter anak = supervisingDpjp/DPJP utama; dr. Santi Rini = dpjp field; doctorRole="RABER".
+3) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. Konsul Bedah Anak ke dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="KONSUL", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
+4) "DPJP: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="DPJP", supervisingDpjp="".
+5) "dr. Santi Rini Sp.BA" tanpa keterangan peran => JANGAN menebak DPJP/RABER/KONSUL dari spesialisasinya. doctorRole boleh kosong dan field dokter hanya diisi bila hubungan tanggung jawab memang jelas.
+
+ATURAN PRIORITAS PERAN:
+A. Selalu cari label/hubungan per dokter dalam konteks pasien yang sama: DPJP, DPJP utama, RABER/RB/rawat bersama, KONSUL/konsul ke/dimintakan konsultasi.
+B. Jika ada konflik, pernyataan eksplisit tentang hubungan pasien mengalahkan asumsi berdasarkan spesialisasi, urutan nama, atau divisi stase.
+C. Jika tertulis "DPJP: A; RABER: B", A adalah DPJP utama dan B adalah RABER. Jangan membaliknya.
+D. Jika tertulis "DPJP: A; Konsul: B", A adalah DPJP utama dan B adalah KONSUL.
+E. Jika teks hanya menyebut "raber dengan B", B adalah RABER dan cari DPJP utama dari bagian pasien yang sama. Jika tidak ditemukan, supervisingDpjp kosong; JANGAN membuat DPJP dari tebakan.
+F. Jika teks hanya menyebut "konsul ke B", B adalah KONSUL dan cari DPJP utama dari bagian pasien yang sama.
+G. Jangan menggunakan dokter dari pasien lain untuk mengisi supervisingDpjp.
+H. Jangan menganggap "konsulen" selalu berarti DPJP. Konsulen dapat merupakan dokter yang dikonsulkan.
+I. Jika dokter anak dan dokter bedah anak muncul bersama, jangan memilih dokter bedah sebagai DPJP secara otomatis. Ikuti label tanggung jawab yang tertulis.
+J. Setiap pasien harus dinilai sendiri. Jangan membawa role dari pasien nomor 1 ke pasien nomor 2.
+
+OUTPUT SEMANTIK:
+- dpjp: dokter yang menjadi subjek peran aplikasi (DPJP/RABER/KONSUL).
+- doctorRole: tepat salah satu "DPJP", "RABER", "KONSUL", atau "" jika benar-benar tidak dapat ditentukan.
+- supervisingDpjp: DPJP utama untuk pasien bila doctorRole=RABER/KONSUL dan hubungan itu tertulis/teridentifikasi jelas; jika tidak jelas, "".
+- Jika doctorRole="DPJP", supervisingDpjp="".
+
+DIVISI STASE AKTIF: ${division || "Bedah"}
+DAFTAR DOKTER BEDAH YANG DIKENAL:
+${surgicalDoctors.length ? surgicalDoctors.join("\n") : "-"}
+
+DAFTAR DOKTER ANAK YANG DIKENAL (mereka dapat menjadi DPJP utama):
+${pediatricDoctors.length ? pediatricDoctors.join("\n") : "-"}
+
 DAFTAR RUANGAN ACUAN:
-${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : '-'}
+${Array.isArray(knownRooms) && knownRooms.length ? knownRooms.join(", ") : "-"}
 
-DAFTAR DOKTER ACUAN:
-${Array.isArray(knownDpjps) && knownDpjps.length > 0 ? knownDpjps.join('\n') : '-'}
-
-ATURAN:
+FIELD LAIN:
 1. name: nama pasien seperti tertulis.
 2. age: usia bila eksplisit; jika tidak ada, "".
-3. jk: hanya 'L' atau 'P' jika eksplisit/ditentukan jelas oleh sapaan klinis (Tn/Bpk/Sdr = L; Ny/Ibu/Nn/Sdri = P). Jika tidak jelas, "". JANGAN default L.
+3. jk: hanya L/P jika eksplisit atau jelas dari Tn/Bpk/Sdr atau Ny/Ibu/Nn/Sdri. Jika tidak jelas, "".
 4. rm: nomor RM bila ada; jika tidak ada, "".
-5. room: ruangan sesuai teks atau kecocokan terdekat dari daftar acuan; jangan mengarang.
+5. room: ruangan sesuai teks atau kecocokan terdekat dari daftar; jangan mengarang.
 6. kamar: nomor kamar/bed bila ada; jika tidak ada, "".
-7. dpjp: dokter yang tertulis sebagai DPJP/penanggung jawab atau dokter terkait; jika tidak ada, "".
-8. doctorRole: 'DPJP' bila eksplisit sebagai DPJP; 'RABER' bila eksplisit rawat bersama/raber; 'KONSUL' bila eksplisit konsulen; selain itu kosong/tidak disertakan.
-9. supervisingDpjp: nama DPJP utama bila teks secara eksplisit menyebutkan DPJP utama pada pasien Raber/Konsul; jika tidak ada, "".
-10. dx: diagnosis klinis ringkas saja. Jangan memasukkan tindakan, TTV, atau catatan lain.
+7. dx: diagnosis klinis ringkas saja. Jangan memasukkan tindakan, TTV, atau catatan lain.
+
+JANGAN mengarang data. Hanya ekstrak fakta yang didukung catatan.
 
 CATATAN MENTAH:
 """
@@ -114,7 +146,7 @@ ${text}
           model: modelName,
           contents: prompt,
           config: {
-            systemInstruction: "Ekstrak data klinis secara konservatif. Jika informasi tidak jelas, kosongkan field tersebut.",
+            systemInstruction: "Anda harus memprioritaskan hubungan DPJP/RABER/KONSUL yang tertulis. Jangan menentukan peran berdasarkan spesialisasi dokter. Output harus konsisten dengan definisi klinis dan contoh yang diberikan.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.ARRAY,
@@ -127,9 +159,9 @@ ${text}
                   rm: { type: Type.STRING },
                   room: { type: Type.STRING },
                   kamar: { type: Type.STRING },
-                  dpjp: { type: Type.STRING },
+                  dpjp: { type: Type.STRING, description: "Dokter yang memegang peran aplikasi: DPJP, RABER, atau KONSUL" },
                   doctorRole: { type: Type.STRING, description: "DPJP, RABER, KONSUL, atau kosong" },
-                  supervisingDpjp: { type: Type.STRING, description: "DPJP utama untuk Raber/Konsul bila eksplisit" },
+                  supervisingDpjp: { type: Type.STRING, description: "DPJP utama jika dokter di field dpjp adalah RABER/KONSUL" },
                   dx: { type: Type.STRING },
                 },
                 required: ["name", "age", "jk", "rm", "room", "kamar", "dpjp", "doctorRole", "supervisingDpjp", "dx"],
@@ -138,7 +170,10 @@ ${text}
           },
         });
         rawText = response.text?.trim() || "[]";
-        if (rawText) { lastErr = null; break; }
+        if (rawText) {
+          lastErr = null;
+          break;
+        }
       } catch (err: any) {
         lastErr = err;
         await new Promise((r) => setTimeout(r, 600));
