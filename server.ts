@@ -69,34 +69,59 @@ TEKS CATATAN MENTAH:
 ${text}
 """`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: prompt,
-        config: {
-          systemInstruction: "Anda adalah asisten medis cerdas koas bedah yang bertugas mengekstrak catatan pasien mentah menjadi JSON terstruktur sesuai format data web.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            description: "Daftar pasien yang berhasil diekstrak",
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING, description: "Nama pasien" },
-                age: { type: Type.STRING, description: "Usia pasien" },
-                jk: { type: Type.STRING, description: "Jenis kelamin: 'L' atau 'P'" },
-                rm: { type: Type.STRING, description: "Nomor Rekam Medis" },
-                room: { type: Type.STRING, description: "Nama Ruangan / Bangsal" },
-                kamar: { type: Type.STRING, description: "Nomor Kamar atau Bed" },
-                dpjp: { type: Type.STRING, description: "Nama Dokter DPJP" },
-                dx: { type: Type.STRING, description: "Diagnosis kerja/klinis pasien" },
-              },
-              required: ["name", "jk", "dx"],
-            },
-          },
-        },
-      });
+      // Daftar model berurutan jika terjadi 503 (High Demand / Busy) pada model tertentu
+      const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
+      let rawText = "";
+      let lastErr: any = null;
 
-      const rawText = response.text?.trim() || "[]";
+      for (const modelName of candidateModels) {
+        try {
+          console.log(`[AI Parser] Mencoba memproses dengan model: ${modelName}...`);
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              systemInstruction: "Anda adalah asisten medis cerdas koas bedah yang bertugas mengekstrak catatan pasien mentah menjadi JSON terstruktur sesuai format data web.",
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                description: "Daftar pasien yang berhasil diekstrak",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "Nama pasien" },
+                    age: { type: Type.STRING, description: "Usia pasien" },
+                    jk: { type: Type.STRING, description: "Jenis kelamin: 'L' atau 'P'" },
+                    rm: { type: Type.STRING, description: "Nomor Rekam Medis" },
+                    room: { type: Type.STRING, description: "Nama Ruangan / Bangsal" },
+                    kamar: { type: Type.STRING, description: "Nomor Kamar atau Bed" },
+                    dpjp: { type: Type.STRING, description: "Nama Dokter DPJP" },
+                    dx: { type: Type.STRING, description: "Diagnosis kerja/klinis pasien" },
+                  },
+                  required: ["name", "jk", "dx"],
+                },
+              },
+            },
+          });
+
+          rawText = response.text?.trim() || "[]";
+          if (rawText) {
+            // Berhasil mendapatkan respons
+            lastErr = null;
+            break;
+          }
+        } catch (err: any) {
+          lastErr = err;
+          console.warn(`[AI Parser] Model ${modelName} kendala (${err?.status || err?.message}), mencoba model cadangan...`);
+          // Beri jeda singkat sebelum fallback
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+
+      if (lastErr && !rawText) {
+        throw lastErr;
+      }
+
       let parsedPatients = [];
       try {
         parsedPatients = JSON.parse(rawText);
@@ -104,7 +129,7 @@ ${text}
         console.error("Gagal menguraikan JSON hasil Gemini:", rawText);
         return res.status(500).json({
           success: false,
-          error: "Gagal memproses respon dari model AI.",
+          error: "Gagal mengurai respon AI ke format pasien.",
         });
       }
 

@@ -8,6 +8,7 @@ import {
   GitPullRequest,
   UserPlus,
   Sparkles,
+  Sparkle,
   FileSpreadsheet
 } from 'lucide-react';
 import { DivisionTeam } from '../types';
@@ -161,7 +162,7 @@ export function ControlsBar({
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
               title="Salin & Tempel Catatan Teks untuk Diubah Menjadi Pasien Otomatis oleh AI"
             >
-              <Sparkles className="w-4 h-4 text-amber-300 shrink-0 animate-pulse" />
+              <Sparkle className="w-3.5 h-3.5 shrink-0" />
               <span>AI Impor Catatan</span>
             </button>
           )}
