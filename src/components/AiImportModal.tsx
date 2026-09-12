@@ -54,14 +54,31 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
     if (incompleteSupervising) { setError(`DPJP utama untuk pasien "${incompleteSupervising.name}" belum diisi karena dokter tersebut berperan sebagai ${incompleteSupervising.doctorRole === 'RABER' ? 'Raber' : 'Konsul'}.`); return; }
 
     const timestamp = new Date().toISOString();
-    const newPatients: Patient[] = valid.map((p, idx) => ({
-      id: `pt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-      name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '', rm: p.rm.trim(),
-      room: normalizeRoomName(p.room) || '', kamar: p.kamar.trim(), dpjp: p.dpjp.trim(),
-      doctorRole: p.doctorRole as DoctorRole,
-      supervisingDpjp: p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL' ? p.supervisingDpjp!.trim() : undefined,
-      dx: p.dx.trim(), updatedAt: timestamp, teamCode: teamCode || '', date, division,
-    }));
+    const divisionDoctors = knownDpjps.map((d) => d.trim());
+    const norm = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+    const findDivisionDoctor = (value?: string) => divisionDoctors.find((d) => norm(d) === norm(value || '')) || '';
+    const newPatients: Patient[] = valid.map((p, idx) => {
+      let roleDoctor = p.dpjp.trim();
+      let mainDpjp = p.supervisingDpjp?.trim() || '';
+      const roleDoctorInDivision = findDivisionDoctor(roleDoctor);
+      const mainDpjpInDivision = findDivisionDoctor(mainDpjp);
+      if (!roleDoctorInDivision && mainDpjpInDivision && (p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL')) {
+        const externalMain = roleDoctor;
+        roleDoctor = mainDpjpInDivision;
+        mainDpjp = externalMain;
+      } else if (!roleDoctorInDivision && p.doctorRole === 'DPJP') {
+        mainDpjp = roleDoctor;
+        roleDoctor = '';
+      }
+      return {
+        id: `pt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '', rm: p.rm.trim(),
+        room: normalizeRoomName(p.room) || '', kamar: p.kamar.trim(), dpjp: roleDoctor,
+        doctorRole: p.doctorRole as DoctorRole,
+        supervisingDpjp: mainDpjp || undefined,
+        dx: p.dx.trim(), updatedAt: timestamp, teamCode: teamCode || '', date, division,
+      };
+    });
     onImportPatients(newPatients); onClose();
   };
 
