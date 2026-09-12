@@ -1,0 +1,41 @@
+name: Fix Gemini model
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Update Gemini model fallback list
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('api/ai/parse-patients.ts')
+          s = p.read_text()
+          old = 'const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];'
+          new = 'const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash"];'
+          if old not in s:
+              raise SystemExit('Expected Gemini candidate model list was not found')
+          p.write_text(s.replace(old, new))
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Verify TypeScript
+        run: npm run lint
+      - name: Verify production build
+        run: npm run build
+      - name: Commit fix and remove one-shot workflow
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add api/ai/parse-patients.ts .github/workflows/fix-gemini-model.yml
+          git commit -m 'fix: migrate AI parser to supported Gemini models'
+          git push
