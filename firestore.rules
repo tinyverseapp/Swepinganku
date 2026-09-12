@@ -84,21 +84,5 @@ service cloud.firestore {
         && request.resource.data.email.size() <= 320;
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
-
-    // AI quota is controlled by the authenticated user's Firebase ID token.
-    // The application server performs the atomic transaction; users can only
-    // access their own quota records and cannot touch another user's quota.
-    match /aiUsage/{uid}/daily/{date} {
-      allow read, create, update: if request.auth != null
-        && request.auth.uid == uid
-        && date.matches('^\\d{4}-\\d{2}-\\d{2}$')
-        && request.resource.data.uid == uid
-        && request.resource.data.date == date
-        && request.resource.data.count is int
-        && request.resource.data.count >= 0
-        && request.resource.data.count <= 5
-        && request.resource.data.keys().hasOnly(['uid', 'date', 'count', 'updatedAt']);
-      allow delete: if false;
-    }
   }
 }
