@@ -23,6 +23,20 @@ import { Patient } from '../types';
 const COLLECTION = 'sweepinganku';
 const WEEKLY_HISTORY_TYPE = 'weeklyHistory';
 
+// Firestore rejects `undefined` anywhere in a document. Optional patient
+// fields may be absent, so sanitize every write at the Firestore boundary.
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => stripUndefined(item)) as T;
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      if (item !== undefined) result[key] = stripUndefined(item);
+    });
+    return result as T;
+  }
+  return value;
+}
+
 type FirestorePatientRecord = Patient & {
   recordType?: string;
   weekStart?: string;
@@ -84,7 +98,7 @@ function isWeeklyHistory(data: FirestorePatientRecord): boolean {
 function historyPayload(patient: Patient, teamCode: string, date: string): FirestorePatientRecord {
   const recordedAt = new Date().toISOString();
   const weekStart = getWeekStart(date);
-  return {
+  return stripUndefined({
     ...patient,
     teamCode,
     date,
@@ -95,7 +109,7 @@ function historyPayload(patient: Patient, teamCode: string, date: string): Fires
     lastDate: date,
     days: { [date]: { patient: { ...patient, teamCode, date }, recordedAt } },
     updatedAt: recordedAt,
-  };
+  });
 }
 
 /** Permanently record one patient occurrence for the Monday-Sunday recap. */
@@ -130,7 +144,7 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
     const weekEnd = getWeekEnd(weekStart);
 
     patients.forEach((p) => {
-      const normalized = { ...p, teamCode, date, updatedAt: recordedAt };
+      const normalized = stripUndefined({ ...p, teamCode, date, updatedAt: recordedAt });
       batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
       const legacyId = makeLegacyDocId(normalized);
       const stableId = makeDocId(normalized);
@@ -140,7 +154,7 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
       }
       if (normalized.rm) {
         const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
-        batch.set(historyRef, {
+        batch.set(historyRef, stripUndefined({
           ...normalized,
           recordType: WEEKLY_HISTORY_TYPE,
           weekStart,
@@ -149,7 +163,7 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
           lastDate: date,
           updatedAt: recordedAt,
           [`days.${date}`]: { patient: normalized, recordedAt },
-        }, { merge: true });
+        }), { merge: true });
       }
     });
     await batch.commit();
@@ -191,7 +205,7 @@ export async function seedWeeklyHistory(teamCode: string, startDate: string, end
       const date = p.date as string;
       const weekStart = getWeekStart(date);
       const ref = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, p.rm));
-      batch.set(ref, {
+      batch.set(ref, stripUndefined({
         ...p,
         teamCode,
         recordType: WEEKLY_HISTORY_TYPE,
@@ -201,7 +215,7 @@ export async function seedWeeklyHistory(teamCode: string, startDate: string, end
         lastDate: date,
         updatedAt: recordedAt,
         [`days.${date}`]: { patient: { ...p, teamCode, date }, recordedAt },
-      }, { merge: true });
+      }), { merge: true });
     });
 
   await batch.commit();
@@ -340,12 +354,43 @@ export async function deletePatientFromFirestore(patient: Patient & { teamCode?:
 
 export async function upsertPatientToFirestore(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
-  const normalized = { ...patient, teamCode, date, updatedAt: new Date().toISOString() };
+  const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: new Date().toISOString() });
   await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);
   const legacyId = makeLegacyDocId(normalized);
   const stableId = makeDocId(normalized);
   if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));
   await recordWeeklyHistory(normalized, teamCode, date);
+}
+
+/** Atomically import a complete AI result; no partial patient imports. */
+export async function upsertPatientsToFirestore(patients: Patient[], teamCode: string, date: string): Promise<void> {
+  if (!teamCode) throw new Error('Kode tim Firebase kosong.');
+  if (!patients.length) return;
+  const batch = writeBatch(db);
+  const recordedAt = new Date().toISOString();
+  const weekStart = getWeekStart(date);
+  const weekEnd = getWeekEnd(weekStart);
+  patients.forEach((patient) => {
+    const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: recordedAt });
+    batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
+    const legacyId = makeLegacyDocId(normalized);
+    const stableId = makeDocId(normalized);
+    if (legacyId !== stableId) batch.delete(doc(db, COLLECTION, legacyId));
+    if (normalized.rm) {
+      const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
+      batch.set(historyRef, stripUndefined({
+        ...normalized,
+        recordType: WEEKLY_HISTORY_TYPE,
+        weekStart,
+        weekEnd,
+        firstDate: date,
+        lastDate: date,
+        updatedAt: recordedAt,
+        [`days.${date}`]: { patient: normalized, recordedAt },
+      }), { merge: true });
+    }
+  });
+  await batch.commit();
 }
 
 export async function movePatientToDateFirestore(patient: Patient, teamCode: string, fromDate: string, toDate: string): Promise<void> {

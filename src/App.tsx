@@ -13,7 +13,7 @@ import {
   isRemovedDoctor
 } from './utils/storage';
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
-import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, upsertPatientToFirestore, movePatientToDateFirestore } from './lib/firestoreService';
+import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
@@ -176,7 +176,7 @@ export default function App() {
     try {
       // Do not call savePatientsBatch here. It is a list-level operation and is
       // unsafe for an import that is concurrently observed by onSnapshot.
-      await Promise.all(importedPatients.map((patient) => upsertPatientToFirestore(patient, activeTeam.teamCode, date)));
+      await upsertPatientsToFirestore(importedPatients, activeTeam.teamCode, date);
 
       // Firebase is now authoritative. Update local cache after all remote writes
       // have succeeded; the realtime listener will also reconcile this state.
