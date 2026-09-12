@@ -1,8 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
 const recentRequests = new Map<string, number[]>();
 const MAX_REQUESTS_PER_MINUTE = 10;
 const MAX_TEXT_LENGTH = 30000;
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 function getAllowedOrigin(req: any): string {
   const origin = String(req.headers?.origin || "");
@@ -14,7 +13,7 @@ function getAllowedOrigin(req: any): string {
 }
 
 async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email?: string }> {
-  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || "AIzaSyDtbsg1WEdVrp03Vy9vhG3w7jnnXxUQ8x8";
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || "AIzaSyDtb1gWEdVrp03Vy9vhG3w7jnnXxUQ8x8";
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -37,6 +36,91 @@ function allowRate(uid: string): boolean {
   recent.push(now);
   recentRequests.set(uid, recent);
   return true;
+}
+
+function normalizeModelName(name: string): string {
+  return String(name || "").replace(/^models\//, "").trim();
+}
+
+async function getAvailableGeminiModels(apiKey: string): Promise<string[]> {
+  const response = await fetch(`${GEMINI_API_BASE}/models?key=${encodeURIComponent(apiKey)}&pageSize=100`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Gagal membaca daftar model Gemini (HTTP ${response.status}).`);
+  }
+  const data = await response.json();
+  return Array.isArray(data?.models)
+    ? data.models
+        .filter((model: any) => Array.isArray(model?.supportedGenerationMethods) && model.supportedGenerationMethods.includes("generateContent"))
+        .map((model: any) => normalizeModelName(model?.name))
+        .filter(Boolean)
+    : [];
+}
+
+function getModelCandidates(availableModels: string[]): string[] {
+  // Jangan lagi fallback ke model 2.x yang dapat dinonaktifkan/ditolak untuk user baru.
+  // Prioritas: model stabil terbaru yang benar-benar tersedia pada API key ini.
+  const preferred = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash"];
+  const available = new Set(availableModels.map(normalizeModelName));
+  const discovered = preferred.filter((model) => available.has(model));
+  return discovered.length ? discovered : preferred;
+}
+
+const responseSchema = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: {
+      name: { type: "STRING" },
+      age: { type: "STRING" },
+      jk: { type: "STRING", description: "L, P, atau kosong" },
+      rm: { type: "STRING" },
+      room: { type: "STRING" },
+      kamar: { type: "STRING" },
+      dpjp: { type: "STRING", description: "Dokter yang memegang peran aplikasi: DPJP, RABER, atau KONSUL" },
+      doctorRole: { type: "STRING", description: "DPJP, RABER, KONSUL, atau kosong" },
+      supervisingDpjp: { type: "STRING", description: "DPJP utama jika dokter di field dpjp adalah RABER/KONSUL" },
+      dx: { type: "STRING" },
+    },
+    required: ["name", "age", "jk", "rm", "room", "kamar", "dpjp", "doctorRole", "supervisingDpjp", "dx"],
+  },
+};
+
+async function generateWithGemini(apiKey: string, modelName: string, prompt: string): Promise<string> {
+  const response = await fetch(`${GEMINI_API_BASE}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": "swepinganku-ai" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{
+          text: "Anda harus memprioritaskan hubungan DPJP/RABER/KONSUL yang tertulis. Jangan menentukan peran berdasarkan spesialisasi dokter. Output harus konsisten dengan definisi klinis dan contoh yang diberikan.",
+        }],
+      },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+      },
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const apiMessage = String(data?.error?.message || "Gemini API menolak permintaan.").trim();
+    const error: any = new Error(`${modelName}: ${apiMessage}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part: any) => String(part?.text || ""))
+    .join("")
+    .trim();
+  if (!text) {
+    throw new Error(`${modelName}: Gemini tidak mengembalikan teks JSON.`);
+  }
+  return text;
 }
 
 export default async function handler(req: any, res: any) {
@@ -71,7 +155,6 @@ export default async function handler(req: any, res: any) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return res.status(500).json({ success: false, error: "GEMINI_API_KEY belum disetel di Vercel Environment Variables." });
 
-    const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { "User-Agent": "swepinganku-ai" } } });
     const surgicalDoctors = Array.isArray(knownDpjps) ? knownDpjps.filter(Boolean) : [];
     const pediatricDoctors = Array.isArray(knownPediatricDpjps) ? knownPediatricDpjps.filter(Boolean) : [];
 
@@ -136,52 +219,45 @@ CATATAN MENTAH:
 ${text}
 """`;
 
-    const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash"];
+    let availableModels: string[] = [];
+    try {
+      availableModels = await getAvailableGeminiModels(apiKey);
+    } catch (modelListError: any) {
+      console.warn("[Gemini model discovery warning]:", modelListError?.message || modelListError);
+    }
+
+    const candidateModels = getModelCandidates(availableModels);
+    const errors: string[] = [];
     let rawText = "";
-    let lastErr: any = null;
+    let selectedModel = "";
 
     for (const modelName of candidateModels) {
       try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: prompt,
-          config: {
-            systemInstruction: "Anda harus memprioritaskan hubungan DPJP/RABER/KONSUL yang tertulis. Jangan menentukan peran berdasarkan spesialisasi dokter. Output harus konsisten dengan definisi klinis dan contoh yang diberikan.",
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  age: { type: Type.STRING },
-                  jk: { type: Type.STRING, description: "L, P, atau kosong" },
-                  rm: { type: Type.STRING },
-                  room: { type: Type.STRING },
-                  kamar: { type: Type.STRING },
-                  dpjp: { type: Type.STRING, description: "Dokter yang memegang peran aplikasi: DPJP, RABER, atau KONSUL" },
-                  doctorRole: { type: Type.STRING, description: "DPJP, RABER, KONSUL, atau kosong" },
-                  supervisingDpjp: { type: Type.STRING, description: "DPJP utama jika dokter di field dpjp adalah RABER/KONSUL" },
-                  dx: { type: Type.STRING },
-                },
-                required: ["name", "age", "jk", "rm", "room", "kamar", "dpjp", "doctorRole", "supervisingDpjp", "dx"],
-              },
-            },
-          },
-        });
-        rawText = response.text?.trim() || "[]";
-        if (rawText) {
-          lastErr = null;
-          break;
-        }
+        rawText = await generateWithGemini(apiKey, modelName, prompt);
+        selectedModel = modelName;
+        break;
       } catch (err: any) {
-        lastErr = err;
-        await new Promise((r) => setTimeout(r, 600));
+        const status = Number(err?.status || 0);
+        errors.push(String(err?.message || `${modelName}: gagal memproses permintaan`));
+        // Model yang tidak tersedia/ditolak dicoba dengan model stabil berikutnya.
+        // Jangan pernah kembali ke Gemini 2.5/2.0 yang menjadi sumber error pada deployment lama.
+        if (status === 401 || status === 403) break;
       }
     }
-    if (lastErr && !rawText) throw lastErr;
+
+    if (!rawText) {
+      console.error("[Gemini all-models failed]:", errors);
+      return res.status(502).json({
+        success: false,
+        error: `Tidak ada model Gemini yang berhasil memproses permintaan. ${errors.join(" | ")}`,
+      });
+    }
 
     const parsedPatients = JSON.parse(rawText || "[]");
+    if (!Array.isArray(parsedPatients)) {
+      throw new Error("Respons AI bukan array pasien yang valid.");
+    }
+
     const formatted = parsedPatients.map((p: any) => {
       const jk = p.jk === "L" || p.jk === "P" ? p.jk : "";
       const doctorRole = p.doctorRole === "RABER" || p.doctorRole === "KONSUL" || p.doctorRole === "DPJP" ? p.doctorRole : undefined;
@@ -200,7 +276,7 @@ ${text}
       };
     }).filter((p: any) => p.name.length > 0);
 
-    return res.status(200).json({ success: true, count: formatted.length, patients: formatted });
+    return res.status(200).json({ success: true, count: formatted.length, model: selectedModel, patients: formatted });
   } catch (err: any) {
     console.error("[Vercel API Error]:", err);
     return res.status(500).json({ success: false, error: err?.message || "Terjadi kendala saat memproses catatan dengan AI." });
