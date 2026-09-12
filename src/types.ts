@@ -2,6 +2,7 @@ export interface Patient {
   id: string;
   dpjp: string;
   doctorRole?: 'DPJP' | 'RABER' | 'KONSUL';
+  supervisingDpjp?: string;
   room: string;
   kamar: string;
   name: string;
