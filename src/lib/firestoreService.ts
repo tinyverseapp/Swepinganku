@@ -148,10 +148,9 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
       batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
       const legacyId = makeLegacyDocId(normalized);
       const stableId = makeDocId(normalized);
-      if (legacyId !== stableId) {
-        const legacyRef = doc(db, COLLECTION, legacyId);
-        batch.delete(legacyRef);
-      }
+      // Legacy cleanup is intentionally omitted here. A speculative delete
+      // of a document that does not exist can be rejected by Firestore Rules
+      // and would abort the entire batch. Stable IDs are authoritative.
       if (normalized.rm) {
         const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
         batch.set(historyRef, stripUndefined({
@@ -356,9 +355,8 @@ export async function upsertPatientToFirestore(patient: Patient, teamCode: strin
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: new Date().toISOString() });
   await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);
-  const legacyId = makeLegacyDocId(normalized);
-  const stableId = makeDocId(normalized);
-  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));
+  // Stable IDs are authoritative. Do not speculatively delete a legacy
+  // document whose existence has not been verified.
   await recordWeeklyHistory(normalized, teamCode, date);
 }
 
@@ -373,9 +371,8 @@ export async function upsertPatientsToFirestore(patients: Patient[], teamCode: s
   patients.forEach((patient) => {
     const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: recordedAt });
     batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
-    const legacyId = makeLegacyDocId(normalized);
-    const stableId = makeDocId(normalized);
-    if (legacyId !== stableId) batch.delete(doc(db, COLLECTION, legacyId));
+    // AI import is atomic: never add speculative legacy deletes because a
+    // missing delete target can make the whole batch fail with permission-denied.
     if (normalized.rm) {
       const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));
       batch.set(historyRef, stripUndefined({
@@ -413,9 +410,8 @@ export async function movePatientToDateFirestore(patient: Patient, teamCode: str
 
   const batch = writeBatch(db);
   batch.delete(doc(db, COLLECTION, makeDocId({ ...patient, teamCode, date: fromDate })));
-  const legacyFromId = makeLegacyDocId({ ...patient, teamCode, date: fromDate });
-  const stableFromId = makeDocId({ ...patient, teamCode, date: fromDate });
-  if (legacyFromId !== stableFromId) batch.delete(doc(db, COLLECTION, legacyFromId));
+  // Delete only the known stable source document. Legacy cleanup is not
+  // performed speculatively during a move.
   batch.set(doc(db, COLLECTION, makeDocId(movedPatient)), movedPatient);
   await batch.commit();
 }
