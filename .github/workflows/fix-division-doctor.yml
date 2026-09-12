@@ -3,6 +3,7 @@ name: fix division doctor classification
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,9 +22,8 @@ jobs:
           s = p.read_text()
           start = s.index('  // A patient belongs to the surgical division')
           end = s.index('  const filteredPatients = useMemo', start)
-          replacement = '''  // Dokter yang menjadi dasar klasifikasi dashboard adalah dokter MASTER divisi aktif.
-          // DPJP dari luar divisi hanya menjadi catatan tambahan dan tidak membuat
-          // pasien berpindah kelompok divisi.
+          replacement = '''  // Dokter master divisi aktif adalah satu-satunya dasar klasifikasi dashboard.
+          // DPJP dari luar divisi hanya menjadi catatan tambahan.
           const consultants = useMemo(() => (DIVISION_CONSULTANTS[division] || []).filter((c) => !isRemovedDoctor(c)), [division]);
           const divisionDoctorNames = useMemo(() => consultants.map((d) => d.trim()), [consultants]);
           const normalizeDoctor = (value?: string) => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
@@ -45,14 +45,10 @@ jobs:
       const supervisingDoctor = p.supervisingDpjp?.trim();
       if (roleDoctor !== selectedDpjpFilter && supervisingDoctor !== selectedDpjpFilter) return false;
     }'''
-          new_filter = '''    if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;'''
-          s = s.replace(old_filter, new_filter)
-          old_count = "const count = patients.filter((p) => p.dpjp === d || p.supervisingDpjp === d).length;"
-          s = s.replace(old_count, "const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length;")
+          s = s.replace(old_filter, '''    if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;''')
+          s = s.replace("const count = patients.filter((p) => p.dpjp === d || p.supervisingDpjp === d).length;", "const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length;")
           p.write_text(s)
 
-          # Keep the AI importer aligned with the same master list: external DPJP
-          # doctors are supporting notes, never dashboard classification doctors.
           p = Path('src/components/AiImportModal.tsx')
           s = p.read_text()
           old = '''    const newPatients: Patient[] = valid.map((p, idx) => ({
