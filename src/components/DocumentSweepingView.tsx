@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
-import { FileText, Copy, Printer, Check, Plus, ArrowLeft, MoreVertical, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, KeyRound, GitPullRequest, PanelLeftClose, Menu, Sparkles, Trash2 } from 'lucide-react';
+import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
 interface DocumentSweepingViewProps {
@@ -59,9 +59,6 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
         <button onClick={handleCopyWA} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white min-h-[36px]">{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{copied ? 'Tersalin!' : 'Salin WA'}</button>
         {onHandoverPatients && <button onClick={onHandoverPatients} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-300 min-h-[36px]"><GitPullRequest className="w-3.5 h-3.5" />Operan</button>}
         <button onClick={() => setIncludeEmptyRooms(!includeEmptyRooms)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-50/80 text-teal-800 border border-teal-200 min-h-[36px]"><SlidersHorizontal className="w-3.5 h-3.5" />R. Kosong (0): {includeEmptyRooms ? 'On' : 'Off'}</button>
-        {activeTeam && onOpenTeamModal && <button onClick={onOpenTeamModal} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-50/80 text-teal-800 border border-teal-200 min-h-[36px]"><KeyRound className="w-3.5 h-3.5" />PIN: {activeTeam.teamCode}</button>}
-        <button onClick={() => window.print()} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 min-h-[36px]"><Printer className="w-4 h-4" />Cetak</button>
-        {onOpenAiImport && <button onClick={onOpenAiImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white min-h-[36px]"><Sparkles className="w-3.5 h-3.5" />AI Impor</button>}
         {onDeleteAllPatients && patients.length > 0 && (
           <button
             type="button"
