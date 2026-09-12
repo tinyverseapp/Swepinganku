@@ -1,0 +1,70 @@
+from pathlib import Path
+
+app = Path('src/App.tsx')
+s = app.read_text()
+start = s.index('  // A patient belongs to the surgical division')
+end = s.index('  const filteredPatients = useMemo', start)
+replacement = '''  // Dokter master divisi aktif adalah satu-satunya dasar klasifikasi dashboard.
+  // DPJP dari luar divisi hanya menjadi catatan tambahan.
+  const consultants = useMemo(() => (DIVISION_CONSULTANTS[division] || []).filter((c) => !isRemovedDoctor(c)), [division]);
+  const divisionDoctorNames = useMemo(() => consultants.map((d) => d.trim()), [consultants]);
+  const normalizeDoctor = (value?: string) => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+  const isDivisionDoctor = (value?: string) => {
+    const normalized = normalizeDoctor(value);
+    return !!normalized && divisionDoctorNames.some((doctor) => normalizeDoctor(doctor) === normalized);
+  };
+  const getDivisionDoctorForPatient = (patient: Patient) => {
+    if (isDivisionDoctor(patient.dpjp)) return patient.dpjp.trim();
+    if (isDivisionDoctor(patient.supervisingDpjp)) return patient.supervisingDpjp!.trim();
+    return '';
+  };
+  const existingDpjps = divisionDoctorNames;
+
+'''
+s = s[:start] + replacement + s[end:]
+s = s.replace("""    if (selectedDpjpFilter !== 'all') {
+      const roleDoctor = p.dpjp?.trim();
+      const supervisingDoctor = p.supervisingDpjp?.trim();
+      if (roleDoctor !== selectedDpjpFilter && supervisingDoctor !== selectedDpjpFilter) return false;
+    }""", """    if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;""")
+s = s.replace("const count = patients.filter((p) => p.dpjp === d || p.supervisingDpjp === d).length;", "const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length;")
+app.write_text(s)
+
+modal = Path('src/components/AiImportModal.tsx')
+s = modal.read_text()
+old = '''    const newPatients: Patient[] = valid.map((p, idx) => ({
+      id: `pt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+      name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '', rm: p.rm.trim(),
+      room: normalizeRoomName(p.room) || '', kamar: p.kamar.trim(), dpjp: p.dpjp.trim(),
+      doctorRole: p.doctorRole as DoctorRole,
+      supervisingDpjp: p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL' ? p.supervisingDpjp!.trim() : undefined,
+      dx: p.dx.trim(), updatedAt: timestamp, teamCode: teamCode || '', date, division,
+    }));'''
+new = '''    const divisionDoctors = knownDpjps.map((d) => d.trim());
+    const norm = (value: string) => value.trim().toLowerCase().replace(/\\s+/g, ' ');
+    const findDivisionDoctor = (value?: string) => divisionDoctors.find((d) => norm(d) === norm(value || '')) || '';
+    const newPatients: Patient[] = valid.map((p, idx) => {
+      let roleDoctor = p.dpjp.trim();
+      let mainDpjp = p.supervisingDpjp?.trim() || '';
+      const roleDoctorInDivision = findDivisionDoctor(roleDoctor);
+      const mainDpjpInDivision = findDivisionDoctor(mainDpjp);
+      if (!roleDoctorInDivision && mainDpjpInDivision && (p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL')) {
+        const externalMain = roleDoctor;
+        roleDoctor = mainDpjpInDivision;
+        mainDpjp = externalMain;
+      } else if (!roleDoctorInDivision && p.doctorRole === 'DPJP') {
+        mainDpjp = roleDoctor;
+        roleDoctor = '';
+      }
+      return {
+        id: `pt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '', rm: p.rm.trim(),
+        room: normalizeRoomName(p.room) || '', kamar: p.kamar.trim(), dpjp: roleDoctor,
+        doctorRole: p.doctorRole as DoctorRole,
+        supervisingDpjp: mainDpjp || undefined,
+        dx: p.dx.trim(), updatedAt: timestamp, teamCode: teamCode || '', date, division,
+      };
+    });'''
+if old not in s:
+    raise SystemExit('AI importer target block not found')
+modal.write_text(s.replace(old, new))
