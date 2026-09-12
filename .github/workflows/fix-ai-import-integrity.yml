@@ -1,0 +1,80 @@
+name: fix-ai-import-integrity
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, 'fix: harden AI import integrity') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Patch Firestore writes and AI import
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          fs = Path('src/lib/firestoreService.ts')
+          s = fs.read_text()
+
+          anchor = "const WEEKLY_HISTORY_TYPE = 'weeklyHistory';\n"
+          helper = '''\n// Firestore rejects `undefined` anywhere in a document. Patient objects can\n// legitimately omit optional fields (for example supervisingDpjp for DPJP),\n// so every write is sanitized at the boundary instead of failing half-way\n// through a multi-patient import.\nfunction stripUndefined<T>(value: T): T {\n  if (Array.isArray(value)) return value.map((item) => stripUndefined(item)) as T;\n  if (value && typeof value === 'object') {\n    const result: Record<string, unknown> = {};\n    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {\n      if (item !== undefined) result[key] = stripUndefined(item);\n    });\n    return result as T;\n  }\n  return value;\n}\n'''
+          if helper.strip() not in s:
+              s = s.replace(anchor, anchor + helper, 1)
+
+          s = s.replace("return {\n    ...patient,\n    teamCode,", "return stripUndefined({\n    ...patient,\n    teamCode,", 1)
+          s = s.replace("    updatedAt: recordedAt,\n  };\n}\n\n/** Permanently", "    updatedAt: recordedAt,\n  });\n}\n\n/** Permanently", 1)
+
+          s = s.replace("const normalized = { ...p, teamCode, date, updatedAt: recordedAt };\n      batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);", "const normalized = stripUndefined({ ...p, teamCode, date, updatedAt: recordedAt });\n      batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);", 1)
+          s = s.replace("batch.set(historyRef, {\n          ...normalized,", "batch.set(historyRef, stripUndefined({\n          ...normalized,", 1)
+          s = s.replace("        }, { merge: true });\n      }\n    });\n    await batch.commit();", "        }), { merge: true });\n      }\n    });\n    await batch.commit();", 1)
+
+          s = s.replace("batch.set(ref, {\n        ...p,", "batch.set(ref, stripUndefined({\n        ...p,", 1)
+          s = s.replace("        [`days.${date}`]: { patient: { ...p, teamCode, date }, recordedAt },\n      }, { merge: true });", "        [`days.${date}`]: { patient: { ...p, teamCode, date }, recordedAt },\n      }), { merge: true });", 1)
+
+          old = """  const normalized = { ...patient, teamCode, date, updatedAt: new Date().toISOString() };\n  await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);\n  const legacyId = makeLegacyDocId(normalized);\n  const stableId = makeDocId(normalized);\n  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));\n  await recordWeeklyHistory(normalized, teamCode, date);\n}\n"""
+          new = """  const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: new Date().toISOString() });\n  await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);\n  const legacyId = makeLegacyDocId(normalized);\n  const stableId = makeDocId(normalized);\n  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));\n  await recordWeeklyHistory(normalized, teamCode, date);\n}\n\n/**\n * Atomically import multiple patients. All daily records and weekly-history\n * occurrences are committed together, so one malformed optional field can no\n * longer leave an import partially saved (for example 5 of 9 patients).\n */\nexport async function upsertPatientsToFirestore(patients: Patient[], teamCode: string, date: string): Promise<void> {\n  if (!teamCode) throw new Error('Kode tim Firebase kosong.');\n  if (!patients.length) return;\n\n  const batch = writeBatch(db);\n  const recordedAt = new Date().toISOString();\n  const weekStart = getWeekStart(date);\n  const weekEnd = getWeekEnd(weekStart);\n\n  patients.forEach((patient) => {\n    const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: recordedAt });\n    const patientRef = doc(db, COLLECTION, makeDocId(normalized));\n    batch.set(patientRef, normalized);\n\n    const legacyId = makeLegacyDocId(normalized);\n    const stableId = makeDocId(normalized);\n    if (legacyId !== stableId) batch.delete(doc(db, COLLECTION, legacyId));\n\n    if (normalized.rm) {\n      const historyRef = doc(db, COLLECTION, weeklyDocId(teamCode, weekStart, normalized.rm));\n      batch.set(historyRef, stripUndefined({\n        ...normalized,\n        recordType: WEEKLY_HISTORY_TYPE,\n        weekStart,\n        weekEnd,\n        firstDate: date,\n        lastDate: date,\n        updatedAt: recordedAt,\n        [`days.${date}`]: { patient: normalized, recordedAt },\n      }), { merge: true });\n    }\n  });\n\n  await batch.commit();\n}\n"""
+          if old not in s:
+              raise SystemExit('Expected upsertPatientToFirestore block not found')
+          s = s.replace(old, new, 1)
+          fs.write_text(s)
+
+          app = Path('src/App.tsx')
+          a = app.read_text()
+          a = a.replace("subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, upsertPatientToFirestore, movePatientToDateFirestore", "subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore", 1)
+          old_call = "await Promise.all(importedPatients.map((patient) => upsertPatientToFirestore(patient, activeTeam.teamCode, date)));"
+          new_call = "await upsertPatientsToFirestore(importedPatients, activeTeam.teamCode, date);"
+          if old_call not in a:
+              raise SystemExit('Expected AI Promise.all import call not found')
+          a = a.replace(old_call, new_call, 1)
+          a = a.replace("      // Do not call savePatientsBatch here. It is a list-level operation and is\n      // unsafe for an import that is concurrently observed by onSnapshot.\n      await upsertPatientsToFirestore(importedPatients, activeTeam.teamCode, date);", "      // Use one Firestore batch: either all imported patients are committed,\n      // or none are. This prevents partial imports when one optional field is invalid.\n      await upsertPatientsToFirestore(importedPatients, activeTeam.teamCode, date);", 1)
+          app.write_text(a)
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/firestoreService.ts src/App.tsx
+          git commit -m "fix: harden AI import integrity"
+          git push
