@@ -12,6 +12,20 @@ export const DIVISION_CONSULTANTS: Record<string, string[]> = {
   'Bedah Saraf': ['dr. Dini Heryani, Sp.BS','dr. Taufiq Fatchur Rochman, Sp.BS']
 };
 
+/** Master database nama konsulen anak yang dapat dipilih sebagai dokter DPJP/konsulen. */
+export const PEDIATRIC_CONSULTANTS: string[] = [
+  'dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A',
+  'dr. Anrih Roi Manthurio, Sp.A',
+  'dr. Diane Meytha Supit, Sp.A, Subsp.TKPS (K)',
+  'dr. Hendra, Sp.A',
+  'dr. Rabiatul Adawiyah, Sp.A',
+  'dr. Sherly Yuniarchan, Sp.A',
+  'dr. Trisna Silawati, Sp.A, Subsp. ETIA (K)',
+  'dr. William S. Tjeng, Sp.A Subsp. IT (K)',
+  'dr. Diah Budiarti, M.Ked.Klin., Sp.A',
+  'dr. Dhini Karunia BA, Sp.A'
+];
+
 /** Master database ruangan dengan urutan tetap resmi. */
 export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia'];
 export const DEFAULT_ROOMS = MASTER_ROOMS;
