@@ -1,0 +1,94 @@
+name: fix-firestore-import-permission
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'fix: prevent AI import permission failures on legacy cleanup')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch Firestore writes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/firestoreService.ts')
+          s = p.read_text()
+
+          old = '''      if (legacyId !== stableId) {
+        const legacyRef = doc(db, COLLECTION, legacyId);
+        batch.delete(legacyRef);
+      }
+'''
+          new = '''      // Never issue a delete against a guessed legacy document ID.
+      // Firestore rules evaluate deletes against the existing resource; a
+      // nonexistent legacy document can therefore turn an otherwise valid
+      // batch into PERMISSION_DENIED. Stale legacy records are handled only
+      // when their existence is known from the query snapshot.
+'''
+          if old not in s:
+              raise SystemExit('savePatientsBatch legacy-delete block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''  const legacyId = makeLegacyDocId(normalized);
+  const stableId = makeDocId(normalized);
+  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));
+  await recordWeeklyHistory(normalized, teamCode, date);
+'''
+          new = '''  // Do not delete a legacy ID speculatively. A delete of a document
+  // that does not exist can be rejected by Firestore Security Rules.
+  await recordWeeklyHistory(normalized, teamCode, date);
+'''
+          if old not in s:
+              raise SystemExit('upsertPatient legacy-delete block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    const legacyId = makeLegacyDocId(normalized);
+    const stableId = makeDocId(normalized);
+    if (legacyId !== stableId) batch.delete(doc(db, COLLECTION, legacyId));
+'''
+          new = '''    // AI import must be all-or-nothing. Never add speculative deletes
+    // for legacy IDs: a missing target can make the entire batch fail with
+    // PERMISSION_DENIED even though every patient write is valid.
+'''
+          if old not in s:
+              raise SystemExit('AI import legacy-delete block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''  const legacyFromId = makeLegacyDocId({ ...patient, teamCode, date: fromDate });
+  const stableFromId = makeDocId({ ...patient, teamCode, date: fromDate });
+  if (legacyFromId !== stableFromId) batch.delete(doc(db, COLLECTION, legacyFromId));
+'''
+          new = '''  // Only delete the stable source document. Do not speculatively delete
+  // a legacy ID that may not exist because Security Rules can reject that
+  // delete before the batch is committed.
+'''
+          if old not in s:
+              raise SystemExit('movePatient legacy-delete block not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Commit source fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/firestoreService.ts
+          git commit -m "fix: prevent AI import permission failures on legacy cleanup"
+          git rm .github/workflows/fix-firestore-import-permission.yml
+          git commit -m "chore: remove temporary Firestore fix workflow"
+          git push
