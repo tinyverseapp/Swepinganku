@@ -1,13 +1,16 @@
 import { Patient } from '../types';
+import { auth } from './firebase';
 
 export interface ParsedPatientRaw {
   name: string;
   age: string;
-  jk: 'L' | 'P';
+  jk: 'L' | 'P' | '';
   rm: string;
   room: string;
   kamar: string;
   dpjp: string;
+  doctorRole?: 'DPJP' | 'RABER' | 'KONSUL';
+  supervisingDpjp?: string;
   dx: string;
 }
 
@@ -19,8 +22,8 @@ export interface ParseResponse {
 }
 
 /**
- * Sends unstructured patient notes to the server-side Gemini AI endpoint.
- * Extracted data only includes: name, age, jk, rm, room, kamar, dpjp, dx.
+ * Sends unstructured patient notes to the authenticated server-side AI endpoint.
+ * AI output is treated as a draft and never invents unknown sex/doctor-role data.
  */
 export async function parsePatientsWithAi(
   text: string,
@@ -30,19 +33,20 @@ export async function parsePatientsWithAi(
 ): Promise<ParsedPatientRaw[]> {
   let response: Response;
   try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Sesi login tidak ditemukan. Silakan login kembali sebelum menggunakan AI.');
+    const idToken = await user.getIdToken();
+
     response = await fetch('/api/ai/parse-patients', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({
-        text,
-        division,
-        knownRooms,
-        knownDpjps,
-      }),
+      body: JSON.stringify({ text, division, knownRooms, knownDpjps }),
     });
   } catch (netErr: any) {
+    if (netErr?.message?.includes('Sesi login')) throw netErr;
     throw new Error('Tidak dapat terhubung ke server AI. Periksa koneksi internet Anda atau coba sesaat lagi.');
   }
 
@@ -59,7 +63,6 @@ export async function parsePatientsWithAi(
 
   if (!response.ok || !data.success) {
     let msg = data.error || 'Gagal memproses catatan pasien dengan AI.';
-    // Format pesan error Google jika dalam bentuk raw JSON
     if (typeof msg === 'string' && msg.includes('503') && (msg.includes('high demand') || msg.includes('UNAVAILABLE'))) {
       msg = 'Server Google AI sedang mengalami lonjakan trafik sesaat. Sistem telah mencoba ulang, silakan klik tombol "Ekstrak Pasien" sekali lagi.';
     } else if (typeof msg === 'string' && msg.includes('429') && msg.includes('RESOURCE_EXHAUSTED')) {
@@ -68,5 +71,10 @@ export async function parsePatientsWithAi(
     throw new Error(msg);
   }
 
-  return data.patients || [];
+  return (data.patients || []).map((p) => ({
+    ...p,
+    jk: p.jk === 'L' || p.jk === 'P' ? p.jk : '',
+    doctorRole: p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL' || p.doctorRole === 'DPJP' ? p.doctorRole : undefined,
+    supervisingDpjp: String(p.supervisingDpjp || '').trim() || undefined,
+  }));
 }
