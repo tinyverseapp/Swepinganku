@@ -6,7 +6,8 @@ export interface Patient {
   room: string;
   kamar: string;
   name: string;
-  jk: 'L' | 'P';
+  /** L/P when known; empty string when the source data is unclear. */
+  jk: 'L' | 'P' | '';
   age: string;
   rm: string;
   dx: string;
