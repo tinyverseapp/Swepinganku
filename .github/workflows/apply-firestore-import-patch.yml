@@ -1,0 +1,49 @@
+name: apply-firestore-import-patch
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore: trigger Firestore import patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch Firestore writes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/firestoreService.ts')
+          s = p.read_text()
+          replacements = [
+            ('''      if (legacyId !== stableId) {\n        const legacyRef = doc(db, COLLECTION, legacyId);\n        batch.delete(legacyRef);\n      }\n''', '''      // Legacy cleanup is intentionally omitted here. A speculative delete\n      // of a document that does not exist can be rejected by Firestore Rules\n      // and would abort the entire batch. Stable IDs are authoritative.\n'''),
+            ('''  const legacyId = makeLegacyDocId(normalized);\n  const stableId = makeDocId(normalized);\n  if (legacyId !== stableId) await deleteDoc(doc(db, COLLECTION, legacyId));\n  await recordWeeklyHistory(normalized, teamCode, date);\n''', '''  // Stable IDs are authoritative. Do not speculatively delete a legacy\n  // document whose existence has not been verified.\n  await recordWeeklyHistory(normalized, teamCode, date);\n'''),
+            ('''    const legacyId = makeLegacyDocId(normalized);\n    const stableId = makeDocId(normalized);\n    if (legacyId !== stableId) batch.delete(doc(db, COLLECTION, legacyId));\n''', '''    // AI import is atomic: never add speculative legacy deletes because a\n    // missing delete target can make the whole batch fail with permission-denied.\n'''),
+            ('''  const legacyFromId = makeLegacyDocId({ ...patient, teamCode, date: fromDate });\n  const stableFromId = makeDocId({ ...patient, teamCode, date: fromDate });\n  if (legacyFromId !== stableFromId) batch.delete(doc(db, COLLECTION, legacyFromId));\n''', '''  // Delete only the known stable source document. Legacy cleanup is not\n  // performed speculatively during a move.\n'''),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit('expected Firestore block not found')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Commit source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/firestoreService.ts
+          git commit -m "fix: prevent AI import permission failures on legacy cleanup"
+          git push
