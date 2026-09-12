@@ -1,14 +1,7 @@
 const recentRequests = new Map<string, number[]>();
 const MAX_REQUESTS_PER_MINUTE = 10;
-const MAX_AI_REQUESTS_PER_DAY = 5;
 const MAX_TEXT_LENGTH = 30000;
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0369700060";
-const FIREBASE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID || "ai-studio-sweepinganku-7b577169-323b-497e-b0c6-aa0e56f181f5";
-const AI_ADMIN_EMAILS = String(process.env.AI_ADMIN_EMAILS || "m.hafidzuddin.s@gmail.com")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
 
 function getAllowedOrigin(req: any): string {
   const origin = String(req.headers?.origin || "");
@@ -33,10 +26,6 @@ async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; em
   return { uid: user.localId, email: user.email };
 }
 
-function isAdmin(identity: { email?: string }): boolean {
-  return Boolean(identity.email && AI_ADMIN_EMAILS.includes(identity.email.trim().toLowerCase()));
-}
-
 function allowRate(uid: string): boolean {
   const now = Date.now();
   const recent = (recentRequests.get(uid) || []).filter((t) => now - t < 60_000);
@@ -47,101 +36,6 @@ function allowRate(uid: string): boolean {
   recent.push(now);
   recentRequests.set(uid, recent);
   return true;
-}
-
-function getQuotaDate(): string {
-  const timeZone = process.env.AI_QUOTA_TIMEZONE || "Asia/Makassar";
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
-function getQuotaDocumentName(uid: string, date: string): string {
-  return `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/aiUsage/${uid}/daily/${date}`;
-}
-
-async function firebaseRest<T>(url: string, idToken: string, options: RequestInit = {}): Promise<{ status: number; data: T }> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
-  const data = await response.json().catch(() => ({}));
-  return { status: response.status, data } as { status: number; data: T };
-}
-
-async function reserveDailyAiQuota(identity: { uid: string; email?: string }, idToken: string): Promise<{ allowed: boolean; remaining: number | null }> {
-  if (isAdmin(identity)) return { allowed: true, remaining: null };
-
-  const date = getQuotaDate();
-  const documentName = getQuotaDocumentName(identity.uid, date);
-  const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/databases/${encodeURIComponent(FIREBASE_DATABASE_ID)}`;
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const begin = await firebaseRest<any>(`${baseUrl}/documents:beginTransaction`, idToken, {
-      method: "POST",
-      body: JSON.stringify({ options: { readWrite: {} } }),
-    });
-    if (begin.status < 200 || begin.status >= 300 || !begin.data?.transaction) {
-      throw new Error("Tidak dapat memeriksa kuota AI harian. Silakan coba lagi.");
-    }
-
-    const transaction = String(begin.data.transaction);
-    const read = await firebaseRest<any>(
-      `${baseUrl}/documents/aiUsage/${encodeURIComponent(identity.uid)}/daily/${encodeURIComponent(date)}?transaction=${encodeURIComponent(transaction)}`,
-      idToken,
-      { method: "GET" },
-    );
-
-    let currentCount = 0;
-    if (read.status >= 200 && read.status < 300) {
-      const raw = read.data?.fields?.count?.integerValue;
-      currentCount = Number(raw || 0);
-      if (!Number.isFinite(currentCount) || currentCount < 0) currentCount = 0;
-    } else if (read.status !== 404) {
-      throw new Error("Tidak dapat membaca kuota AI harian.");
-    }
-
-    if (currentCount >= MAX_AI_REQUESTS_PER_DAY) {
-      return { allowed: false, remaining: 0 };
-    }
-
-    const nextCount = currentCount + 1;
-    const commit = await firebaseRest<any>(`${baseUrl}/documents:commit`, idToken, {
-      method: "POST",
-      body: JSON.stringify({
-        transaction,
-        writes: [{
-          update: {
-            name: documentName,
-            fields: {
-              uid: { stringValue: identity.uid },
-              date: { stringValue: date },
-              count: { integerValue: String(nextCount) },
-              updatedAt: { timestampValue: new Date().toISOString() },
-            },
-          },
-        }],
-      }),
-    });
-
-    if (commit.status >= 200 && commit.status < 300) {
-      return { allowed: true, remaining: MAX_AI_REQUESTS_PER_DAY - nextCount };
-    }
-
-    // Another request may have committed first. Retry the transaction rather than
-    // allowing the daily quota to be exceeded under concurrent requests.
-    if (commit.status === 409 || commit.status === 412) continue;
-    throw new Error("Tidak dapat menyimpan pemakaian AI harian. Silakan coba lagi.");
-  }
-
-  throw new Error("Kuota AI sedang dipakai bersamaan oleh beberapa permintaan. Silakan coba lagi.");
 }
 
 function normalizeModelName(name: string): string {
@@ -246,10 +140,8 @@ export default async function handler(req: any, res: any) {
     if (!token) return res.status(401).json({ success: false, error: "Autentikasi diperlukan untuk menggunakan AI." });
 
     const identity = await verifyFirebaseIdToken(token);
-    const admin = isAdmin(identity);
-
-    if (!admin && !allowRate(identity.uid)) {
-      return res.status(429).json({ success: false, error: "Terlalu banyak permintaan AI dalam waktu singkat. Silakan tunggu sekitar 1 menit lalu coba lagi." });
+    if (!allowRate(identity.uid)) {
+      return res.status(429).json({ success: false, error: "Terlalu banyak permintaan AI. Silakan tunggu sekitar 1 menit lalu coba lagi." });
     }
 
     const { text, division, knownRooms, knownDpjps, knownPediatricDpjps } = req.body || {};
@@ -258,15 +150,6 @@ export default async function handler(req: any, res: any) {
     }
     if (text.length > MAX_TEXT_LENGTH) {
       return res.status(413).json({ success: false, error: `Teks terlalu panjang. Maksimal ${MAX_TEXT_LENGTH.toLocaleString("id-ID")} karakter per permintaan.` });
-    }
-
-    const quota = await reserveDailyAiQuota(identity, token);
-    if (!quota.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Batas penggunaan AI hari ini sudah tercapai (${MAX_AI_REQUESTS_PER_DAY}x). Kuota akan tersedia kembali besok.`,
-        quota: { limit: MAX_AI_REQUESTS_PER_DAY, used: MAX_AI_REQUESTS_PER_DAY, remaining: 0 },
-      });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -393,13 +276,7 @@ ${text}
       };
     }).filter((p: any) => p.name.length > 0);
 
-    return res.status(200).json({
-      success: true,
-      count: formatted.length,
-      model: selectedModel,
-      patients: formatted,
-      quota: admin ? { limit: null, used: null, remaining: null } : { limit: MAX_AI_REQUESTS_PER_DAY, remaining: quota.remaining },
-    });
+    return res.status(200).json({ success: true, count: formatted.length, model: selectedModel, patients: formatted });
   } catch (err: any) {
     console.error("[Vercel API Error]:", err);
     return res.status(500).json({ success: false, error: err?.message || "Terjadi kendala saat memproses catatan dengan AI." });
