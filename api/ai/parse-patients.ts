@@ -61,7 +61,7 @@ async function getAvailableGeminiModels(apiKey: string): Promise<string[]> {
 function getModelCandidates(availableModels: string[]): string[] {
   // Jangan lagi fallback ke model 2.x yang dapat dinonaktifkan/ditolak untuk user baru.
   // Prioritas: model stabil terbaru yang benar-benar tersedia pada API key ini.
-  const preferred = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash"];
+  const preferred = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash"];
   const available = new Set(availableModels.map(normalizeModelName));
   const discovered = preferred.filter((model) => available.has(model));
   return discovered.length ? discovered : preferred;

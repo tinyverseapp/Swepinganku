@@ -27,7 +27,7 @@ async function startServer() {
   // API endpoint for AI Patient Parser
   app.post("/api/ai/parse-patients", async (req, res) => {
     try {
-      const { text, division, knownRooms, knownDpjps } = req.body;
+      const { text, division, knownRooms, knownDpjps, knownPediatricDpjps } = req.body;
       if (!text || typeof text !== 'string' || !text.trim()) {
         return res.status(400).json({
           success: false,
@@ -43,40 +43,63 @@ async function startServer() {
         });
       }
 
+      const surgicalDoctors = Array.isArray(knownDpjps) ? knownDpjps.filter(Boolean) : [];
+      const pediatricDoctors = Array.isArray(knownPediatricDpjps) ? knownPediatricDpjps.filter(Boolean) : [];
+
       const prompt = `Anda adalah asisten medis koas bedah berpengalaman.
 Tugas Anda adalah membaca dan mengekstrak catatan pasien dari berbagai format teks mentah bebas (catatan operan jaga WhatsApp, catatan ronde bangsal, resume stase sebelumnya, atau format bebas) menjadi format data pasien terstruktur yang bersih.
 
+KONSEP KLINIS WAJIB:
+- DPJP = Dokter Penanggung Jawab Pelayanan. Ini adalah dokter utama yang bertanggung jawab atas pelayanan pasien. Jika catatan menyebut "DPJP", "DPJP utama", "dokter penanggung jawab", atau padanan yang jelas, dokter tersebut adalah DPJP.
+- RABER = Rawat Bersama. Dokter dari bidang lain ikut merawat pasien bersama DPJP utama. Dokter RABER BUKAN DPJP utama hanya karena ia dokter bedah/spesialis yang sedang menangani masalahnya.
+- KONSUL = dokter yang dimintai konsultasi. Dokter konsulen BUKAN DPJP utama kecuali teks secara eksplisit menyatakan ia juga DPJP.
+- Untuk RABER/KONSUL, field dpjp berisi NAMA DOKTER YANG BERPERAN SEBAGAI RABER/KONSUL (dokter bedah pada aplikasi), doctorRole berisi perannya ("RABER" atau "KONSUL"), dan supervisingDpjp berisi DPJP utama.
+- Untuk DPJP, field dpjp berisi dokter DPJP, doctorRole bernilai "DPJP", dan supervisingDpjp harus kosong "".
+- Spesialisasi TIDAK menentukan peran. Dokter anak bisa menjadi DPJP. Dokter bedah anak bisa menjadi RABER atau KONSUL. Jangan pernah mengubah RABER/KONSUL menjadi DPJP hanya karena dokter tersebut dari divisi aktif.
+
+CONTOH WAJIB:
+1) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. RABER: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="RABER", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
+2) "DPJP dokter anak, rawat bersama dengan dr. Santi Rini Sp.BA" => supervisingDpjp="dokter anak"; dpjp="dr. Santi Rini, Sp.BA"; doctorRole="RABER".
+3) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. Konsul Bedah Anak ke dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="KONSUL", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
+4) "DPJP: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="DPJP", supervisingDpjp="".
+5) "dr. Santi Rini Sp.BA" tanpa keterangan peran => JANGAN menebak DPJP/RABER/KONSUL dari spesialisasinya. doctorRole boleh kosong "" dan field dokter hanya diisi bila hubungan tanggung jawab memang jelas.
+
 DIVISI STASE AKTIF: ${division || 'Bedah'}
+DAFTAR DOKTER BEDAH / DPJP ACUAN:
+${surgicalDoctors.length > 0 ? surgicalDoctors.join('\n') : '-'}
+
+DAFTAR DOKTER ANAK KONSULEN / RUJUKAN ACUAN:
+${pediatricDoctors.length > 0 ? pediatricDoctors.join('\n') : '-'}
+
 DAFTAR RUANGAN / BANGSAL ACUAN:
 ${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : 'IGD, Seroja, NICU, PICU, ICCU, ICU, Ratai, Anggrek, Edelweiss, Cempaka, Aster, Melati, Flamboyan 1, Flamboyan 2, HCU, Angsoka, Dahlia'}
-
-DAFTAR DOKTER DPJP KONSULEN ACUAN:
-${Array.isArray(knownDpjps) && knownDpjps.length > 0 ? knownDpjps.join('\n') : '-'}
 
 ATURAN STRUKTUR DATA (SANGAT KETAT):
 1. name: Nama pasien. Pertahankan sebutan jika ada (Tn, Ny, An, By, dsb. Contoh: "Tn. Sutrisno", "Ny. Siti Aminah", "An. Rafa").
 2. age: Usia pasien dalam format singkat (misal: "45 th", "8 bln", "2 th", "60"). Jika tidak tertera, gunakan string kosong "".
-3. jk: Jenis kelamin pasien. HARUS bernilai 'L' (Laki-laki) atau 'P' (Perempuan). Bila tidak jelas, simpulkan dari sapaan/nama (Tn/Bpk/Sdr -> 'L', Ny/Ibu/Nn/Sdri -> 'P') atau default 'L'.
-4. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918", "123456"). Jika tidak ada, gunakan string kosong "".
-5. room: Nama ruangan / bangsal. Gunakan nama ruangan terdekat dari daftar acuan (misal: "Melati", "Dahlia", "Bougenville", "ICU", "IGD"). Jika di teks tertulis ruangan lain, tuliskan sesuai teks.
+3. jk: Jenis kelamin pasien: 'L' (Laki-laki), 'P' (Perempuan), atau string kosong "".
+4. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918"). Jika tidak ada, gunakan string kosong "".
+5. room: Nama ruangan / bangsal sesuai teks atau kecocokan terdekat.
 6. kamar: Nomor kamar atau nomor bed (misal: "Bed 3", "2A", "Bed 1", "3", "HCU-2").
-7. dpjp: Nama dokter konsulen / DPJP yang merawat. Jika cocok dengan dokter acuan, gunakan format lengkapnya. Jika tidak ada di acuan, tuliskan nama dokter yang tertera di teks.
-8. dx: Diagnosis kerja / klinis pasien.
-   PERHATIAN KHUSUS DARI USER: HANYA diagnosis saja! JANGAN menyertakan pre/post op terpisah, JANGAN menyertakan tindakan operasi, JANGAN menyertakan TTV (tekanan darah, nadi, suhu, saturasi), dan JANGAN menyertakan catatan khusus. Cukup diagnosis penyakitnya secara ringkas dan medis (misal: "Appendisitis Akut", "Cholelithiasis simptomatik", "Fraktur Femur Dextra", "BPH ec Retensio Urin").
+7. dpjp: Nama dokter konsulen / yang merawat sesuai peran.
+8. doctorRole: "DPJP", "RABER", "KONSUL", atau "" bila belum pasti.
+9. supervisingDpjp: Nama DPJP utama bila doctorRole adalah RABER atau KONSUL, jika DPJP kosongkan "".
+10. dx: Diagnosis kerja / klinis pasien secara ringkas dan medis. HANYA diagnosis saja! JANGAN menyertakan pre/post op terpisah, tindakan operasi, atau TTV.
 
 TEKS CATATAN MENTAH:
 """
 ${text}
 """`;
 
-      // Daftar model berurutan jika terjadi 503 (High Demand / Busy) pada model tertentu
-      const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
+      // Gunakan model Gemini aktif & didukung (model 2.0-flash / 1.5-flash sudah deprecated)
+      const candidateModels = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash"];
       let rawText = "";
       let lastErr: any = null;
+      let usedModel = "";
 
       for (const modelName of candidateModels) {
         try {
-          console.log(`[AI Parser] Mencoba memproses dengan model: ${modelName}...`);
+          console.log(`[AI Parser] Memproses dengan model: ${modelName}...`);
           const response = await ai.models.generateContent({
             model: modelName,
             contents: prompt,
@@ -91,11 +114,13 @@ ${text}
                   properties: {
                     name: { type: Type.STRING, description: "Nama pasien" },
                     age: { type: Type.STRING, description: "Usia pasien" },
-                    jk: { type: Type.STRING, description: "Jenis kelamin: 'L' atau 'P'" },
+                    jk: { type: Type.STRING, description: "Jenis kelamin: 'L', 'P', atau ''" },
                     rm: { type: Type.STRING, description: "Nomor Rekam Medis" },
                     room: { type: Type.STRING, description: "Nama Ruangan / Bangsal" },
                     kamar: { type: Type.STRING, description: "Nomor Kamar atau Bed" },
-                    dpjp: { type: Type.STRING, description: "Nama Dokter DPJP" },
+                    dpjp: { type: Type.STRING, description: "Nama Dokter DPJP / Raber / Konsul" },
+                    doctorRole: { type: Type.STRING, description: "Peran dokter: 'DPJP', 'RABER', atau 'KONSUL'" },
+                    supervisingDpjp: { type: Type.STRING, description: "Nama DPJP utama jika doctorRole adalah RABER atau KONSUL" },
                     dx: { type: Type.STRING, description: "Diagnosis kerja/klinis pasien" },
                   },
                   required: ["name", "jk", "dx"],
@@ -106,15 +131,15 @@ ${text}
 
           rawText = response.text?.trim() || "[]";
           if (rawText) {
-            // Berhasil mendapatkan respons
+            usedModel = modelName;
             lastErr = null;
             break;
           }
         } catch (err: any) {
           lastErr = err;
-          console.warn(`[AI Parser] Model ${modelName} kendala (${err?.status || err?.message}), mencoba model cadangan...`);
+          console.warn(`[AI Parser] Model ${modelName} kendala (${err?.status || err?.message}), mencoba model berikutnya...`);
           // Beri jeda singkat sebelum fallback
-          await new Promise((r) => setTimeout(r, 600));
+          await new Promise((r) => setTimeout(r, 400));
         }
       }
 
@@ -134,20 +159,28 @@ ${text}
       }
 
       // Pastikan format terstandar
-      const formatted = parsedPatients.map((p: any) => ({
-        name: String(p.name || '').trim(),
-        age: String(p.age || '').trim(),
-        jk: p.jk === 'P' ? 'P' : 'L',
-        rm: String(p.rm || '').trim(),
-        room: String(p.room || '').trim(),
-        kamar: String(p.kamar || '').trim(),
-        dpjp: String(p.dpjp || '').trim(),
-        dx: String(p.dx || '').trim(),
-      })).filter((p: any) => p.name.length > 0);
+      const formatted = parsedPatients.map((p: any) => {
+        const jk = p.jk === 'P' || p.jk === 'L' ? p.jk : '';
+        const doctorRole = p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL' || p.doctorRole === 'DPJP' ? p.doctorRole : undefined;
+        const supervisingDpjp = String(p.supervisingDpjp || '').trim() || undefined;
+        return {
+          name: String(p.name || '').trim(),
+          age: String(p.age || '').trim(),
+          jk,
+          rm: String(p.rm || '').trim(),
+          room: String(p.room || '').trim(),
+          kamar: String(p.kamar || '').trim(),
+          dpjp: String(p.dpjp || '').trim(),
+          ...(doctorRole ? { doctorRole } : {}),
+          ...(supervisingDpjp ? { supervisingDpjp } : {}),
+          dx: String(p.dx || '').trim(),
+        };
+      }).filter((p: any) => p.name.length > 0);
 
       return res.json({
         success: true,
         count: formatted.length,
+        model: usedModel,
         patients: formatted,
       });
     } catch (err: any) {
