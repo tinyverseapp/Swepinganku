@@ -4,10 +4,12 @@ import {
   User,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   updateProfile,
 } from 'firebase/auth';
 import { LogIn, Mail, LockKeyhole, ShieldCheck, Stethoscope, UserPlus, UserRound } from 'lucide-react';
@@ -23,10 +25,13 @@ function getAuthErrorMessage(code?: string): string {
     case 'auth/weak-password': return 'Password terlalu lemah. Gunakan minimal 6 karakter.';
     case 'auth/user-disabled': return 'Akun ini dinonaktifkan.';
     case 'auth/popup-closed-by-user': return 'Jendela Google ditutup sebelum selesai.';
-    case 'auth/popup-blocked': return 'Popup Google diblokir browser. Izinkan popup lalu coba lagi.';
+    case 'auth/popup-blocked': return 'Popup Google diblokir browser. Membuka login Google dengan halaman pengalihan...';
+    case 'auth/cancelled-popup-request': return 'Permintaan login Google dibatalkan. Silakan coba lagi.';
+    case 'auth/unauthorized-domain': return 'Domain aplikasi belum diizinkan di Firebase Authentication. Tambahkan domain Swepinganku di Authorized domains Firebase.';
+    case 'auth/account-exists-with-different-credential': return 'Email Google tersebut sudah terdaftar dengan metode login lain. Login menggunakan metode sebelumnya.';
+    case 'auth/operation-not-allowed': return 'Login Google belum diaktifkan di Firebase Authentication.';
     case 'auth/too-many-requests': return 'Terlalu banyak percobaan. Silakan coba beberapa saat lagi.';
     case 'auth/network-request-failed': return 'Koneksi internet bermasalah. Periksa koneksi lalu coba lagi.';
-    case 'auth/operation-not-allowed': return 'Metode autentikasi ini belum diaktifkan di Firebase.';
     default: return 'Autentikasi gagal. Periksa data dan konfigurasi Firebase.';
   }
 }
@@ -45,6 +50,18 @@ export function AuthGate({ children }: AuthGateProps) {
   useEffect(() => {
     let active = true;
     setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+    // Complete a Google sign-in that was started with the redirect fallback.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!active || !result?.user) return;
+        setError('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(getAuthErrorMessage((err as { code?: string })?.code));
+      });
+
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       if (!active) return;
       setUser(nextUser);
@@ -77,13 +94,28 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const handleGoogleAuth = async () => {
     setError(''); setBusy(true);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
     } catch (err) {
-      setError(getAuthErrorMessage((err as { code?: string })?.code));
-    } finally { setBusy(false); }
+      const code = (err as { code?: string })?.code;
+      // Some browsers/extensions block Firebase's popup. Fall back to the
+      // full-page OAuth redirect so Google registration still works.
+      if (code === 'auth/popup-blocked' || code === 'auth/internal-error') {
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          setError(getAuthErrorMessage((redirectErr as { code?: string })?.code));
+        }
+      } else {
+        setError(getAuthErrorMessage(code));
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading) return (
