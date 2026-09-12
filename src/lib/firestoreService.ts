@@ -190,7 +190,19 @@ export async function seedWeeklyHistory(teamCode: string, startDate: string, end
   await batch.commit();
 }
 
-/** Realtime subscription to permanent Monday-Sunday history in the existing collection. */
+/**
+ * Realtime Monday-Sunday recap.
+ *
+ * The previous implementation subscribed only to weekly-history documents.
+ * That made the recap depend on a separate backfill/write completing first.
+ * Here we subscribe to all records for the team and combine:
+ *   1. permanent weekly-history occurrences, and
+ *   2. current daily patient records in the requested week.
+ *
+ * Therefore a patient already present on the dashboard appears immediately,
+ * and later edits/deletes are reflected without losing an occurrence already
+ * captured in weekly history.
+ */
 export function subscribeToWeeklyHistory(
   teamCode: string,
   weekStart: string,
@@ -199,14 +211,73 @@ export function subscribeToWeeklyHistory(
 ): Unsubscribe {
   if (!teamCode || !weekStart) { callback([]); return () => {}; }
 
-  // Query only by teamCode to avoid requiring a new composite index. The
-  // recordType/weekStart filter is intentionally done client-side.
+  const weekEnd = getWeekEnd(weekStart);
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode));
+
   return onSnapshot(q, (snap) => {
-    const records = snap.docs
-      .map((d) => d.data() as FirestorePatientRecord)
-      .filter((data) => isWeeklyHistory(data) && data.weekStart === weekStart) as WeeklyHistoryRecord[];
-    callback(records);
+    const recordsByRm = new Map<string, WeeklyHistoryRecord>();
+
+    const ensureRecord = (patient: Patient, date: string, days: Record<string, { patient: Patient; recordedAt: string }>) => {
+      if (!patient.rm) return;
+      const key = rmKey(patient.rm);
+      if (!key) return;
+      const existing = recordsByRm.get(key);
+      if (existing) {
+        existing.days = { ...existing.days, ...days };
+        return;
+      }
+      recordsByRm.set(key, {
+        ...patient,
+        teamCode,
+        date,
+        weekStart,
+        weekEnd,
+        firstDate: date,
+        lastDate: date,
+        days,
+        recordType: WEEKLY_HISTORY_TYPE,
+      });
+    };
+
+    // First load permanent history. These records survive a daily deletion.
+    snap.docs.forEach((d) => {
+      const data = d.data() as FirestorePatientRecord;
+      if (!isWeeklyHistory(data) || data.weekStart !== weekStart || !data.rm) return;
+      const days = Object.fromEntries(
+        Object.entries(data.days || {}).filter(([dt]) => dt >= weekStart && dt <= weekEnd),
+      );
+      if (!Object.keys(days).length) return;
+      ensureRecord(data as Patient, data.lastDate || weekStart, days);
+    });
+
+    // Then overlay current daily records. This is the realtime source of truth
+    // for patients currently visible in the dashboard.
+    snap.docs.forEach((d) => {
+      const data = d.data() as FirestorePatientRecord;
+      if (isWeeklyHistory(data) || !data.date || data.date < weekStart || data.date > weekEnd || !data.rm) return;
+      const key = rmKey(data.rm);
+      const occurrence = { patient: data as Patient, recordedAt: data.updatedAt || new Date().toISOString() };
+      const existing = recordsByRm.get(key);
+      if (existing) {
+        existing.days = { ...existing.days, [data.date]: occurrence };
+      } else {
+        ensureRecord(data as Patient, data.date, { [data.date]: occurrence });
+      }
+    });
+
+    // Refresh summary fields from the latest occurrence in the week.
+    recordsByRm.forEach((record) => {
+      const entries = Object.entries(record.days).sort(([a], [b]) => a.localeCompare(b));
+      if (!entries.length) return;
+      const first = entries[0][0];
+      const latest = entries[entries.length - 1][0];
+      const latestPatient = entries[entries.length - 1][1].patient;
+      record.firstDate = first;
+      record.lastDate = latest;
+      Object.assign(record, latestPatient, { teamCode, weekStart, weekEnd, days: record.days, recordType: WEEKLY_HISTORY_TYPE });
+    });
+
+    callback([...recordsByRm.values()]);
   }, (err) => {
     console.error('[Firestore] subscribeToWeeklyHistory error:', err);
     onError?.(err);
