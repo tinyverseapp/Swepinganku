@@ -44,6 +44,7 @@ export function PatientCard({ patient, onEdit, onDelete, onQuickShare, onMove, i
             <span className="truncate">{patient.dpjp || '-'}</span>
             <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide bg-slate-100 text-slate-600 border border-slate-200 rounded-md px-1.5 py-0.5">{roleLabel}</span>
           </div>
+          {patient.supervisingDpjp && <div className={`text-slate-600 bg-amber-50 border border-amber-100 rounded-lg leading-snug ${isCompact ? 'px-1.5 py-1 text-[10px]' : 'px-2 py-1.5 text-[11px]'}`} title="DPJP utama dari luar divisi; hanya sebagai catatan tambahan"><span className="font-bold text-amber-800">DPJP Utama:</span> {patient.supervisingDpjp}</div>}
           <div className={`text-slate-800 font-normal bg-slate-50 border border-slate-100 rounded-lg leading-relaxed whitespace-pre-wrap ${isCompact ? 'p-1.5 text-[10.5px] line-clamp-2 hover:line-clamp-none transition-all' : 'p-2.5 text-[11px]'}`}>{patient.dx || 'Diagnosis klinis belum diisi.'}</div>
         </div>
       </div>
