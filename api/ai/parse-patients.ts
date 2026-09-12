@@ -1,79 +1,109 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-export default async function handler(req: any, res: any) {
-  // Set CORS headers
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
-  );
+const recentRequests = new Map<string, number[]>();
+const MAX_REQUESTS_PER_MINUTE = 10;
+const MAX_TEXT_LENGTH = 30000;
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+function getAllowedOrigin(req: any): string {
+  const origin = String(req.headers?.origin || "");
+  const configured = String(process.env.APP_ORIGIN || "").trim();
+  if (configured && origin === configured) return origin;
+  if (origin === "http://localhost:3000" || origin === "http://localhost:5173") return origin;
+  if (/^https:\/\/[^/]+\.vercel\.app$/.test(origin)) return origin;
+  return configured || "https://swepinganku.vercel.app";
+}
+
+async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email?: string }> {
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || "AIzaSyDtbsg1WEdVrp03Vy9vhG3w7jnnXxUQ8x8";
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!response.ok) throw new Error("Sesi Firebase tidak valid atau sudah kedaluwarsa.");
+  const data = await response.json();
+  const user = data?.users?.[0];
+  if (!user?.localId) throw new Error("Sesi Firebase tidak valid.");
+  return { uid: user.localId, email: user.email };
+}
+
+function allowRate(uid: string): boolean {
+  const now = Date.now();
+  const recent = (recentRequests.get(uid) || []).filter((t) => now - t < 60_000);
+  if (recent.length >= MAX_REQUESTS_PER_MINUTE) {
+    recentRequests.set(uid, recent);
+    return false;
   }
+  recent.push(now);
+  recentRequests.set(uid, recent);
+  return true;
+}
 
+export default async function handler(req: any, res: any) {
+  const origin = getAllowedOrigin(req);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "OPTIONS,POST");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      error: "Method not allowed. Gunakan metode POST.",
-    });
+    return res.status(405).json({ success: false, error: "Method not allowed. Gunakan metode POST." });
   }
 
   try {
+    const authorization = String(req.headers?.authorization || "");
+    const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+    if (!token) return res.status(401).json({ success: false, error: "Autentikasi diperlukan untuk menggunakan AI." });
+
+    const identity = await verifyFirebaseIdToken(token);
+    if (!allowRate(identity.uid)) {
+      return res.status(429).json({ success: false, error: "Terlalu banyak permintaan AI. Silakan tunggu sekitar 1 menit lalu coba lagi." });
+    }
+
     const { text, division, knownRooms, knownDpjps } = req.body || {};
     if (!text || typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: "Teks catatan pasien tidak boleh kosong.",
-      });
+      return res.status(400).json({ success: false, error: "Teks catatan pasien tidak boleh kosong." });
+    }
+    if (text.length > MAX_TEXT_LENGTH) {
+      return res.status(413).json({ success: false, error: `Teks terlalu panjang. Maksimal ${MAX_TEXT_LENGTH.toLocaleString('id-ID')} karakter per permintaan.` });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        error: "GEMINI_API_KEY belum disetel di Vercel Environment Variables. Buka Project Settings > Environment Variables di Vercel.",
-      });
+      return res.status(500).json({ success: false, error: "GEMINI_API_KEY belum disetel di Vercel Environment Variables." });
     }
 
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
+    const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { "User-Agent": "swepinganku-ai" } } });
 
-    const prompt = `Anda adalah asisten medis koas bedah berpengalaman.
-Tugas Anda adalah membaca dan mengekstrak catatan pasien dari berbagai format teks mentah bebas (catatan operan jaga WhatsApp, catatan ronde bangsal, resume stase sebelumnya, atau format bebas) menjadi format data pasien terstruktur yang bersih.
+    const prompt = `Anda adalah asisten ekstraksi data klinis untuk koas bedah.
+Tugas Anda HANYA mengekstrak informasi yang benar-benar tertulis pada catatan. Jangan mengarang, menyimpulkan fakta yang tidak didukung, atau mengisi nilai kosong dengan tebakan.
 
 DIVISI STASE AKTIF: ${division || 'Bedah'}
-DAFTAR RUANGAN / BANGSAL ACUAN:
-${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : 'IGD, Seroja, NICU, PICU, ICCU, ICU, Ratai, Anggrek, Edelweiss, Cempaka, Aster, Melati, Flamboyan 1, Flamboyan 2, HCU, Angsoka, Dahlia'}
+DAFTAR RUANGAN ACUAN:
+${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : '-'}
 
-DAFTAR DOKTER DPJP KONSULEN ACUAN:
+DAFTAR DOKTER ACUAN:
 ${Array.isArray(knownDpjps) && knownDpjps.length > 0 ? knownDpjps.join('\n') : '-'}
 
-ATURAN STRUKTUR DATA (SANGAT KETAT):
-1. name: Nama pasien. Pertahankan sebutan jika ada (Tn, Ny, An, By, dsb. Contoh: "Tn. Sutrisno", "Ny. Siti Aminah", "An. Rafa").
-2. age: Usia pasien dalam format singkat (misal: "45 th", "8 bln", "2 th", "60"). Jika tidak tertera, gunakan string kosong "".
-3. jk: Jenis kelamin pasien. HARUS bernilai 'L' (Laki-laki) atau 'P' (Perempuan). Bila tidak jelas, simpulkan dari sapaan/nama (Tn/Bpk/Sdr -> 'L', Ny/Ibu/Nn/Sdri -> 'P') atau default 'L'.
-4. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918", "123456"). Jika tidak ada, gunakan string kosong "".
-5. room: Nama ruangan / bangsal. Gunakan nama ruangan terdekat dari daftar acuan (misal: "Melati", "Dahlia", "Bougenville", "ICU", "IGD"). Jika di teks tertulis ruangan lain, tuliskan sesuai teks.
-6. kamar: Nomor kamar atau nomor bed (misal: "Bed 3", "2A", "Bed 1", "3", "HCU-2").
-7. dpjp: Nama dokter konsulen / DPJP yang merawat. Jika cocok dengan dokter acuan, gunakan format lengkapnya. Jika tidak ada di acuan, tuliskan nama dokter yang tertera di teks.
-8. dx: Diagnosis kerja / klinis pasien.
-   PERHATIAN KHUSUS DARI USER: HANYA diagnosis saja! JANGAN menyertakan pre/post op terpisah, JANGAN menyertakan tindakan operasi, JANGAN menyertakan TTV (tekanan darah, nadi, suhu, saturasi), dan JANGAN menyertakan catatan khusus. Cukup diagnosis penyakitnya secara ringkas dan medis (misal: "Appendisitis Akut", "Cholelithiasis simptomatik", "Fraktur Femur Dextra", "BPH ec Retensio Urin").
+ATURAN:
+1. name: nama pasien seperti tertulis.
+2. age: usia bila eksplisit; jika tidak ada, "".
+3. jk: hanya 'L' atau 'P' jika eksplisit/ditentukan jelas oleh sapaan klinis (Tn/Bpk/Sdr = L; Ny/Ibu/Nn/Sdri = P). Jika tidak jelas, "". JANGAN default L.
+4. rm: nomor RM bila ada; jika tidak ada, "".
+5. room: ruangan sesuai teks atau kecocokan terdekat dari daftar acuan; jangan mengarang.
+6. kamar: nomor kamar/bed bila ada; jika tidak ada, "".
+7. dpjp: dokter yang tertulis sebagai DPJP/penanggung jawab atau dokter terkait; jika tidak ada, "".
+8. doctorRole: 'DPJP' bila eksplisit sebagai DPJP; 'RABER' bila eksplisit rawat bersama/raber; 'KONSUL' bila eksplisit konsulen; selain itu kosong/tidak disertakan.
+9. supervisingDpjp: nama DPJP utama bila teks secara eksplisit menyebutkan DPJP utama pada pasien Raber/Konsul; jika tidak ada, "".
+10. dx: diagnosis klinis ringkas saja. Jangan memasukkan tindakan, TTV, atau catatan lain.
 
-TEKS CATATAN MENTAH:
+CATATAN MENTAH:
 """
 ${text}
 """`;
 
-    // Multi-model fallback
     const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
     let rawText = "";
     let lastErr: any = null;
@@ -84,66 +114,60 @@ ${text}
           model: modelName,
           contents: prompt,
           config: {
-            systemInstruction: "Anda adalah asisten medis cerdas koas bedah yang bertugas mengekstrak catatan pasien mentah menjadi JSON terstruktur sesuai format data web.",
+            systemInstruction: "Ekstrak data klinis secara konservatif. Jika informasi tidak jelas, kosongkan field tersebut.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.ARRAY,
-              description: "Daftar pasien yang berhasil diekstrak",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  name: { type: Type.STRING, description: "Nama pasien" },
-                  age: { type: Type.STRING, description: "Usia pasien" },
-                  jk: { type: Type.STRING, description: "Jenis kelamin: 'L' atau 'P'" },
-                  rm: { type: Type.STRING, description: "Nomor Rekam Medis" },
-                  room: { type: Type.STRING, description: "Nama Ruangan / Bangsal" },
-                  kamar: { type: Type.STRING, description: "Nomor Kamar atau Bed" },
-                  dpjp: { type: Type.STRING, description: "Nama Dokter DPJP" },
-                  dx: { type: Type.STRING, description: "Diagnosis kerja/klinis pasien" },
+                  name: { type: Type.STRING },
+                  age: { type: Type.STRING },
+                  jk: { type: Type.STRING, description: "L, P, atau kosong" },
+                  rm: { type: Type.STRING },
+                  room: { type: Type.STRING },
+                  kamar: { type: Type.STRING },
+                  dpjp: { type: Type.STRING },
+                  doctorRole: { type: Type.STRING, description: "DPJP, RABER, KONSUL, atau kosong" },
+                  supervisingDpjp: { type: Type.STRING, description: "DPJP utama untuk Raber/Konsul bila eksplisit" },
+                  dx: { type: Type.STRING },
                 },
-                required: ["name", "jk", "dx"],
+                required: ["name", "age", "jk", "rm", "room", "kamar", "dpjp", "doctorRole", "supervisingDpjp", "dx"],
               },
             },
           },
         });
-
         rawText = response.text?.trim() || "[]";
-        if (rawText) {
-          lastErr = null;
-          break;
-        }
+        if (rawText) { lastErr = null; break; }
       } catch (err: any) {
         lastErr = err;
         await new Promise((r) => setTimeout(r, 600));
       }
     }
-
-    if (lastErr && !rawText) {
-      throw lastErr;
-    }
+    if (lastErr && !rawText) throw lastErr;
 
     const parsedPatients = JSON.parse(rawText || "[]");
-    const formatted = parsedPatients.map((p: any) => ({
-      name: String(p.name || "").trim(),
-      age: String(p.age || "").trim(),
-      jk: p.jk === "P" ? "P" : "L",
-      rm: String(p.rm || "").trim(),
-      room: String(p.room || "").trim(),
-      kamar: String(p.kamar || "").trim(),
-      dpjp: String(p.dpjp || "").trim(),
-      dx: String(p.dx || "").trim(),
-    })).filter((p: any) => p.name.length > 0);
+    const formatted = parsedPatients.map((p: any) => {
+      const jk = p.jk === "L" || p.jk === "P" ? p.jk : "";
+      const doctorRole = p.doctorRole === "RABER" || p.doctorRole === "KONSUL" || p.doctorRole === "DPJP" ? p.doctorRole : undefined;
+      const supervisingDpjp = String(p.supervisingDpjp || "").trim();
+      return {
+        name: String(p.name || "").trim(),
+        age: String(p.age || "").trim(),
+        jk,
+        rm: String(p.rm || "").trim(),
+        room: String(p.room || "").trim(),
+        kamar: String(p.kamar || "").trim(),
+        dpjp: String(p.dpjp || "").trim(),
+        ...(doctorRole ? { doctorRole } : {}),
+        ...(supervisingDpjp ? { supervisingDpjp } : {}),
+        dx: String(p.dx || "").trim(),
+      };
+    }).filter((p: any) => p.name.length > 0);
 
-    return res.status(200).json({
-      success: true,
-      count: formatted.length,
-      patients: formatted,
-    });
+    return res.status(200).json({ success: true, count: formatted.length, patients: formatted });
   } catch (err: any) {
     console.error("[Vercel API Error]:", err);
-    return res.status(500).json({
-      success: false,
-      error: err?.message || "Terjadi kendala saat memproses catatan dengan AI.",
-    });
+    return res.status(500).json({ success: false, error: err?.message || "Terjadi kendala saat memproses catatan dengan AI." });
   }
 }
