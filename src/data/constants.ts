@@ -7,7 +7,7 @@ export const DIVISION_CONSULTANTS: Record<string, string[]> = {
   'Bedah Onkologi': ['dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes','dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
   'Urologi': ['dr. Poppy Desra Syahfitri Nasution, Sp.U','dr. Made Adi Wiratama, Sp.U, M.Ked.Klin, FICS','dr. Muhammad Rozaqy Ishaq, Sp.U, M.Ked.Klin','dr. Boyke Soebhali, Sp.U(K)','dr. Ricky Agave Ompusunggu, Sp.U'],
   'BTKV': ['dr. Ivan Joalsen Mangara Tua, Sp.BTKV, Subsp-VE(K)','dr. Michael Caesario, Sp.BTKV(K)','dr. Ery Irawan, Sp.BTKV, M.Ked.Klin.','dr. David Hermawan Christian, Sp.BTKV, M.Ked.Klin.(K)'],
-  'Bedah Digestif & Umum': ['dr. Bambang Suprapto, Sp. B(K)BD','dr. Ahmad Toboroni Nasution, Sp. B(K)BD','dr. Ahmad Tobroni, Sp. B(K)BD'],
+  'Bedah Digestif & Umum': ['dr. Bambang Suprapto, Sp. B(K)BD','dr. Ahmad Toboroni Nasution, Sp. B(K)BD'],
   'Ortopedi': ['dr. Yasser Ridwan, Sp.OT, K-Spine, FICS','dr. Hendri Purnama, Sp.OT, K-Hip&Knee','dr. Fahroni C. Winata, M.Kes, Sp.OT, K-Sport, FICS, AIFO-K','dr. Achmad Fachrizal, Sp.OT'],
   'Bedah Saraf': ['dr. Dini Heryani, Sp.BS','dr. Taufiq Fatchur Rochman, Sp.BS']
 };
@@ -37,97 +37,54 @@ export function parseAgeInDays(ageStr?: string): number | null {
   if (!ageStr) return null;
   const s = ageStr.toLowerCase().trim();
   if (!s) return null;
-
-  // Indikator langsung kurang dari 1 bulan: "< 1 bln", "< 1 bulan", dsb.
   if (/<\s*1\s*(?:bln|bulan|mo|month)/.test(s)) return 15;
   if (/^0\s*(?:bln|bulan|mo|month)/.test(s)) return 15;
-
   let totalDays = 0;
   let matched = false;
-
   const yr = s.match(/(\d+(?:[.,]\d+)?)\s*(?:th|tahun|thn|yr|year)/);
-  if (yr) {
-    totalDays += parseFloat(yr[1].replace(',', '.')) * 365;
-    matched = true;
-  }
-
+  if (yr) { totalDays += parseFloat(yr[1].replace(',', '.')) * 365; matched = true; }
   const mo = s.match(/(\d+(?:[.,]\d+)?)\s*(?:bln|bulan|mo|month)/);
-  if (mo) {
-    totalDays += parseFloat(mo[1].replace(',', '.')) * 30.4375;
-    matched = true;
-  }
-
+  if (mo) { totalDays += parseFloat(mo[1].replace(',', '.')) * 30.4375; matched = true; }
   const wk = s.match(/(\d+(?:[.,]\d+)?)\s*(?:mgg|minggu|wk|week)/);
-  if (wk) {
-    totalDays += parseFloat(wk[1].replace(',', '.')) * 7;
-    matched = true;
-  }
-
+  if (wk) { totalDays += parseFloat(wk[1].replace(',', '.')) * 7; matched = true; }
   const dy = s.match(/(\d+(?:[.,]\d+)?)\s*(?:hr|hari|day)/);
-  if (dy) {
-    totalDays += parseFloat(dy[1].replace(',', '.'));
-    matched = true;
-  }
-
+  if (dy) { totalDays += parseFloat(dy[1].replace(',', '.')); matched = true; }
   const hr = s.match(/(\d+(?:[.,]\d+)?)\s*(?:jam|hour)/);
-  if (hr) {
-    totalDays += parseFloat(hr[1].replace(',', '.')) / 24;
-    matched = true;
-  }
-
+  if (hr) { totalDays += parseFloat(hr[1].replace(',', '.')) / 24; matched = true; }
   if (matched) return totalDays;
-
   const plainNum = s.match(/^(\d+(?:[.,]\d+)?)$/);
   if (plainNum) return parseFloat(plainNum[1].replace(',', '.')) * 365;
-
   const fallbackNum = s.match(/(\d+(?:[.,]\d+)?)/);
   if (fallbackNum) return parseFloat(fallbackNum[1].replace(',', '.')) * 365;
-
   return null;
 }
-
-export function parseAgeInYears(ageStr?: string): number | null {
-  const days = parseAgeInDays(ageStr);
-  if (days === null) return null;
-  return days / 365;
-}
-
+export function parseAgeInYears(ageStr?: string): number | null { const days = parseAgeInDays(ageStr); if (days === null) return null; return days / 365; }
 export function getPatientHonorific(ageStr?: string, jk?: 'L'|'P'|string, rawName?: string): 'By.'|'An.'|'Tn.'|'Ny.'|'' {
   const days = parseAgeInDays(ageStr);
   if (days !== null) {
-    // Usia kurang dari 1 bulan (< 30 hari) menjadi "By."
     if (days < 30) return 'By.';
-    // Usia 1 bulan hingga < 18 tahun menjadi "An."
     if (days < 18 * 365) return 'An.';
-    // Usia ≥ 18 tahun
     if (jk === 'P') return 'Ny.';
     if (jk === 'L') return 'Tn.';
     return '';
   }
-
   if (rawName && /^(by\.?|bayi)\s+/i.test(rawName.trim())) return 'By.';
   if (rawName && /^(an\.?|anak)\s+/i.test(rawName.trim())) return 'An.';
-
   if (jk === 'P') return 'Ny.';
   if (jk === 'L') return 'Tn.';
   return '';
 }
-
 export function formatPatientNameWithHonorific(name?: string, ageStr?: string, jk?: 'L'|'P'|string): string {
   if (!name || !name.trim()) return '';
   const trimmed = name.trim();
   const prefix = getPatientHonorific(ageStr, jk, trimmed);
   let cleanName = trimmed;
-
   if (/^(by\.?\s*ny\.?|bayi\s*ny\.?)\s+/i.test(cleanName)) {
     cleanName = cleanName.replace(/^(by\.?\s*|bayi\s*)/i, '').trim();
-    if (prefix !== 'An.' && prefix !== 'By.') {
-      cleanName = cleanName.replace(/^(ny\.?|nyonya)\s+/i, '').trim();
-    }
+    if (prefix !== 'An.' && prefix !== 'By.') cleanName = cleanName.replace(/^(ny\.?|nyonya)\s+/i, '').trim();
   } else {
     cleanName = cleanName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
   }
-
   if (!cleanName) return prefix ? `${prefix} ${trimmed}` : trimmed;
   if (!prefix) return trimmed;
   return `${prefix} ${cleanName}`;
