@@ -34,6 +34,7 @@ export function PatientModal({
 }: PatientModalProps) {
   const [dpjp, setDpjp] = useState('');
   const [doctorRole, setDoctorRole] = useState<Patient['doctorRole']>('DPJP');
+  const [supervisingDpjp, setSupervisingDpjp] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('IGD');
   const [isCustomRoom, setIsCustomRoom] = useState(false);
   const [customRoomName, setCustomRoomName] = useState('');
@@ -48,6 +49,7 @@ export function PatientModal({
     if (initialData) {
       setDpjp(initialData.dpjp || '');
       setDoctorRole(initialData.doctorRole || 'DPJP');
+      setSupervisingDpjp(initialData.supervisingDpjp || '');
       const rawRoom = initialData.room || '';
       const normalized = normalizeRoomName(rawRoom);
       const isMaster = MASTER_ROOMS.some((r) => r.toLowerCase() === rawRoom.toLowerCase());
@@ -73,6 +75,7 @@ export function PatientModal({
     } else {
       setDpjp(defaultDpjp || '');
       setDoctorRole('DPJP');
+      setSupervisingDpjp('');
       setSelectedRoom('IGD');
       setIsCustomRoom(false);
       setCustomRoomName('');
@@ -89,6 +92,7 @@ export function PatientModal({
 
   const currentRoomName = isCustomRoom ? (customRoomName.trim() || 'Ruangan Khusus') : selectedRoom;
   const isCurrentBed = isBedRoom(currentRoomName);
+  const needsSupervisingDpjp = doctorRole === 'RABER' || doctorRole === 'KONSUL';
 
   const handleRoomSelectChange = (val: string) => {
     if (val === '__CUSTOM__') {
@@ -100,9 +104,15 @@ export function PatientModal({
     }
   };
 
+  const handleRoleChange = (role: Patient['doctorRole']) => {
+    setDoctorRole(role);
+    if (role === 'DPJP') setSupervisingDpjp('');
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !rm.trim()) return;
+    if (needsSupervisingDpjp && !supervisingDpjp.trim()) return;
 
     const finalRoom = isCustomRoom ? (customRoomName.trim() || 'Ruangan Khusus') : selectedRoom;
     const normalizedRoom = normalizeRoomName(finalRoom);
@@ -114,6 +124,7 @@ export function PatientModal({
       id: initialData ? initialData.id : crypto.randomUUID(),
       dpjp: dpjp.trim() || 'dr. DPJP, Sp.B',
       doctorRole: doctorRole || 'DPJP',
+      supervisingDpjp: needsSupervisingDpjp ? supervisingDpjp.trim() : undefined,
       room: normalizedRoom,
       kamar: finalKamar,
       name: formattedName,
@@ -152,7 +163,7 @@ export function PatientModal({
                 <input type="text" required list="dpjpDatalist" value={dpjp} onChange={(e) => setDpjp(e.target.value)} placeholder="Contoh: dr. Andi Mohammad Ardan, SpBP-RE" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
                 <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
                   {([['DPJP', 'DPJP'], ['RABER', 'Raber'], ['KONSUL', 'Konsul']] as const).map(([value, label]) => (
-                    <button key={value} type="button" onClick={() => setDoctorRole(value)} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${doctorRole === value ? 'bg-white text-blue-700 shadow-sm border border-blue-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                    <button key={value} type="button" onClick={() => handleRoleChange(value)} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${doctorRole === value ? 'bg-white text-blue-700 shadow-sm border border-blue-200' : 'text-slate-500 hover:text-slate-700'}`}>
                       {label}
                     </button>
                   ))}
@@ -166,6 +177,23 @@ export function PatientModal({
                   {(divisionConsultants || []).map((c) => (
                     <button key={c} type="button" onClick={() => setDpjp(c)} className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md px-1.5 py-0.5 font-semibold transition-colors cursor-pointer" title={`Pilih ${c}`}>+ {c.replace(/^dr\.\s*/i, '').split(',')[0]}</button>
                   ))}
+                </div>
+              )}
+
+              {needsSupervisingDpjp && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                  <label className="block font-bold text-amber-900 mb-1">Nama Dokter DPJP *</label>
+                  <input
+                    type="text"
+                    required
+                    list="supervisingDpjpDatalist"
+                    value={supervisingDpjp}
+                    onChange={(e) => setSupervisingDpjp(e.target.value)}
+                    placeholder="Contoh: dr. Ahmad Tobroni, Sp.B(K)BD"
+                    className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
+                  />
+                  <p className="text-[10px] text-amber-800 mt-1">Wajib diisi karena dokter di atas berperan sebagai <b>{doctorRole === 'RABER' ? 'Raber' : 'Konsul'}</b>, bukan DPJP utama pasien.</p>
+                  <datalist id="supervisingDpjpDatalist">{(existingDpjps || []).map((d) => <option key={`supervising-${d}`} value={d} />)}</datalist>
                 </div>
               )}
             </div>
