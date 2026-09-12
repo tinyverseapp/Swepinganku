@@ -1,0 +1,48 @@
+name: One-shot P0 TypeScript fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch TypeScript errors
+        shell: python
+        run: |
+          from pathlib import Path
+
+          doc = Path('src/components/DocumentSweepingView.tsx')
+          text = doc.read_text(encoding='utf-8')
+          old = "const custom = current.filter(r => !base.some(b => b.toLowerCase() === r.toLowerCase()));"
+          new = "const custom = current.filter(r => !base.some((b: string) => b.toLowerCase() === r.toLowerCase()));"
+          if old not in text:
+              raise SystemExit('DocumentSweepingView.tsx target not found')
+          doc.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          storage = Path('src/utils/storage.ts')
+          text = storage.read_text(encoding='utf-8')
+          old = "while(current<=stop&&count<60)"
+          new = "while(current.getTime()<=stop.getTime()&&count<60)"
+          if old not in text:
+              raise SystemExit('storage.ts date comparison target not found')
+          storage.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Commit fixes and remove one-shot workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-p0-ts-errors.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/DocumentSweepingView.tsx src/utils/storage.ts .github/workflows/fix-p0-ts-errors.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: resolve P0 TypeScript verification errors"
+          git push
