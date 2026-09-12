@@ -49,7 +49,7 @@ export function SettingsModal({
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-xs">
               <Settings className="w-5 h-5" />
             </div>
             <div>
@@ -110,7 +110,7 @@ export function SettingsModal({
             <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
               <div>
                 <div className="flex items-center gap-1.5 font-bold text-sm text-slate-900">
-                  <Palette className="w-4 h-4 text-blue-600" />
+                  <Palette className="w-4 h-4 text-teal-600" />
                   <span>Warna Identitas Divisi</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -174,7 +174,7 @@ export function SettingsModal({
                           {divName}
                         </span>
                         {isActive && (
-                          <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 shrink-0">
+                          <span className="text-[10px] font-extrabold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
                             Aktif
                           </span>
                         )}
@@ -266,7 +266,7 @@ export function SettingsModal({
           {/* Display Mode Info */}
           <div className="rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-3 text-xs text-slate-700">
             <div className="font-bold mb-1 flex items-center gap-1.5 text-slate-800">
-              <KeyRound className="w-3.5 h-3.5 text-blue-600" />
+              <KeyRound className="w-3.5 h-3.5 text-teal-600" />
               <span>Penyimpanan Otomatis</span>
             </div>
             <div>
@@ -280,7 +280,7 @@ export function SettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl cursor-pointer transition-colors shadow-xs"
+            className="px-5 py-2 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-xl cursor-pointer transition-colors shadow-xs"
           >
             Selesai
           </button>

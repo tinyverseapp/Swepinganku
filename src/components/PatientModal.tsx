@@ -148,7 +148,7 @@ export function PatientModal({
       <div className="bg-white rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0"><UserPlus className="w-4 h-4" /></div>
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 border border-teal-200/60 flex items-center justify-center shrink-0"><UserPlus className="w-4 h-4" /></div>
             <div>
               <h2 className="text-base font-bold text-slate-900 leading-tight">{initialData ? 'Edit Data Pasien' : 'Tambah Pasien Sweeping'}</h2>
               <p className="text-[11px] text-slate-500 line-clamp-1">Lengkapi identitas, pemilihan ruangan master, dan resume klinis</p>
@@ -162,10 +162,10 @@ export function PatientModal({
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Dokter Bedah &amp; Peran * </label>
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-                <input type="text" required list="dpjpDatalist" value={dpjp} onChange={(e) => setDpjp(e.target.value)} placeholder="Contoh: dr. Andi Mohammad Ardan, SpBP-RE" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                <input type="text" required list="dpjpDatalist" value={dpjp} onChange={(e) => setDpjp(e.target.value)} placeholder="Contoh: dr. Andi Mohammad Ardan, SpBP-RE" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
                 <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
                   {([['DPJP', 'DPJP'], ['RABER', 'Raber'], ['KONSUL', 'Konsul']] as const).map(([value, label]) => (
-                    <button key={value} type="button" onClick={() => handleRoleChange(value)} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${doctorRole === value ? 'bg-white text-blue-700 shadow-sm border border-blue-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                    <button key={value} type="button" onClick={() => handleRoleChange(value)} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${doctorRole === value ? 'bg-white text-teal-700 shadow-sm border border-teal-200' : 'text-slate-500 hover:text-slate-700'}`}>
                       {label}
                     </button>
                   ))}
@@ -177,7 +177,7 @@ export function PatientModal({
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
                   <span className="text-[10px] text-slate-500 font-medium">Konsulen {division}:</span>
                   {(divisionConsultants || []).map((c) => (
-                    <button key={c} type="button" onClick={() => setDpjp(c)} className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md px-1.5 py-0.5 font-semibold transition-colors cursor-pointer" title={`Pilih ${c}`}>+ {c.replace(/^dr\.\s*/i, '').split(',')[0]}</button>
+                    <button key={c} type="button" onClick={() => setDpjp(c)} className="text-[10px] bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-md px-1.5 py-0.5 font-semibold transition-colors cursor-pointer" title={`Pilih ${c}`}>+ {c.replace(/^dr\.\s*/i, '').split(',')[0]}</button>
                   ))}
                 </div>
               )}
@@ -208,36 +208,36 @@ export function PatientModal({
 
             <div>
               <div className="flex items-center justify-between mb-1"><label className="font-bold text-slate-700">Ruangan Rawat Inap *</label><span className="text-[10px] font-semibold text-slate-500">Master DB (19 Ruangan)</span></div>
-              <select value={isCustomRoom ? '__CUSTOM__' : selectedRoom} onChange={(e) => handleRoomSelectChange(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
+              <select value={isCustomRoom ? '__CUSTOM__' : selectedRoom} onChange={(e) => handleRoomSelectChange(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer">
                 <optgroup label="Master Database Ruangan (Urutan Tetap)">{MASTER_ROOMS.map((r) => <option key={r} value={r}>{r} {isBedRoom(r) ? '→ Format Bed' : ''}</option>)}</optgroup>
                 <optgroup label="Pilihan Kasus Khusus"><option value="__CUSTOM__">+ Input Ruangan Kustom (Lainnya)...</option></optgroup>
               </select>
-              {isCustomRoom && <div className="mt-1.5 animate-fadeIn"><input type="text" required value={customRoomName} onChange={(e) => setCustomRoomName(e.target.value)} placeholder="Ketik nama ruangan kustom..." className="w-full bg-white border border-blue-400 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus /><p className="text-[10px] text-slate-500 mt-0.5">Hanya gunakan untuk ruangan khusus yang belum terdaftar di master.</p></div>}
+              {isCustomRoom && <div className="mt-1.5 animate-fadeIn"><input type="text" required value={customRoomName} onChange={(e) => setCustomRoomName(e.target.value)} placeholder="Ketik nama ruangan kustom..." className="w-full bg-white border border-teal-400 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20" autoFocus /><p className="text-[10px] text-slate-500 mt-0.5">Hanya gunakan untuk ruangan khusus yang belum terdaftar di master.</p></div>}
             </div>
 
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-1"><label className="font-bold text-slate-700">{isCurrentBed ? 'Nomor Bed *' : 'Nomor Kamar'}</label>{isCurrentBed ? <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200">Sistem Bed ({currentRoomName})</span> : <span className="text-[10px] text-slate-500">Kamar / Bed</span>}</div>
-              <input type="text" value={kamar} onChange={(e) => setKamar(e.target.value)} placeholder={isCurrentBed ? 'Contoh: Bed 1, Bed 2, Bed 3' : 'Contoh: 2003 (otomatis menjadi K2003)'} className={`w-full border rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 transition-all ${isCurrentBed ? 'bg-purple-50/50 border-purple-300 focus:border-purple-500 focus:ring-purple-500/20 text-purple-950 font-medium' : 'bg-slate-50 border-slate-300 focus:border-blue-500 focus:ring-blue-500/20'}`} />
+              <input type="text" value={kamar} onChange={(e) => setKamar(e.target.value)} placeholder={isCurrentBed ? 'Contoh: Bed 1, Bed 2, Bed 3' : 'Contoh: 2003 (otomatis menjadi K2003)'} className={`w-full border rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 transition-all ${isCurrentBed ? 'bg-purple-50/50 border-purple-300 focus:border-purple-500 focus:ring-purple-500/20 text-purple-950 font-medium' : 'bg-slate-50 border-slate-300 focus:border-teal-500 focus:ring-teal-500/20'}`} />
               {isCurrentBed ? <p className="text-[10px] text-purple-700 mt-1 font-medium">* Ruangan {currentRoomName} menggunakan format Bed (misal: "Bed 1").</p> : <p className="text-[10px] text-slate-400 mt-1">Nomor kamar atau bed tempat pasien dirawat.</p>}
             </div>
 
             <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1"><label className="block font-bold text-slate-700">Nama Lengkap Pasien *</label><span className="text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md flex items-center gap-1"><Sparkles className="w-3 h-3" />Sapaan Otomatis: <b className="font-bold">{autoHonorific}</b></span></div>
-              <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Budi Santoso / Tn. Budi Santoso" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" />
+              <div className="flex items-center justify-between mb-1"><label className="block font-bold text-slate-700">Nama Lengkap Pasien *</label><span className="text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md flex items-center gap-1"><Sparkles className="w-3 h-3" />Sapaan Otomatis: <b className="font-bold">{autoHonorific}</b></span></div>
+              <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Budi Santoso / Tn. Budi Santoso" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium" />
               {previewName && <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><span>Format tersimpan otomatis:</span><span className="font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs">{previewName}</span></p>}
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">Jenis Kelamin</label>
               <div className="flex items-center gap-4 py-2">
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium"><input type="radio" name="modal_jk" value="L" checked={jk === 'L'} onChange={() => setJk('L')} className="accent-blue-600" /><span>Laki-laki (L)</span></label>
-                <label className="flex items-center gap-1.5 cursor-pointer font-medium"><input type="radio" name="modal_jk" value="P" checked={jk === 'P'} onChange={() => setJk('P')} className="accent-blue-600" /><span>Perempuan (P)</span></label>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium"><input type="radio" name="modal_jk" value="L" checked={jk === 'L'} onChange={() => setJk('L')} className="accent-teal-600" /><span>Laki-laki (L)</span></label>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium"><input type="radio" name="modal_jk" value="P" checked={jk === 'P'} onChange={() => setJk('P')} className="accent-teal-600" /><span>Perempuan (P)</span></label>
               </div>
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">Usia Pasien</label>
-              <input type="text" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Contoh: 15 hari / 8 bln / 14 th / 45 th" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+              <input type="text" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Contoh: 15 hari / 8 bln / 14 th / 45 th" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
               <p className="text-[10px] text-slate-500 mt-1">
                 {autoHonorific ? (
                   autoHonorific === 'By.' ? (
@@ -245,7 +245,7 @@ export function PatientModal({
                   ) : autoHonorific === 'An.' ? (
                     <span className="text-amber-700 font-medium">✓ Usia 1 bln s.d. &lt; 18 th → Otomatis <b>An.</b></span>
                   ) : (
-                    <span className="text-blue-700 font-medium">✓ Usia dewasa ({jk === 'L' ? 'L' : 'P'}) → Otomatis <b>{autoHonorific}</b></span>
+                    <span className="text-teal-700 font-medium">✓ Usia dewasa ({jk === 'L' ? 'L' : 'P'}) → Otomatis <b>{autoHonorific}</b></span>
                   )
                 ) : (
                   <span>Ketik usia untuk deteksi otomatis (misal: 10 hr → By., 14 th → An., 45 th → Tn./Ny.)</span>
@@ -255,18 +255,18 @@ export function PatientModal({
 
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Nomor Rekam Medis (No. RM) *</label>
-              <input type="text" required value={rm} onChange={(e) => setRm(e.target.value)} placeholder="00-88-21-45" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+              <input type="text" required value={rm} onChange={(e) => setRm(e.target.value)} placeholder="00-88-21-45" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
             </div>
 
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Diagnosis Klinis, Tindakan Operasi &amp; Catatan Khusus</label>
-              <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post Appendectomy Laparoskopi H+1, drain minimal kemerahan, flatus (+), diet bubur halus..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all leading-relaxed" />
+              <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post Appendectomy Laparoskopi H+1, drain minimal kemerahan, flatus (+), diet bubur halus..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all leading-relaxed" />
             </div>
           </div>
 
           <div className="pt-3.5 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0 bg-white">
             <button type="button" onClick={onClose} className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 active:bg-slate-100 transition-colors text-center cursor-pointer min-h-[42px]">Batal</button>
-            <button type="submit" className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold transition-colors shadow-sm cursor-pointer min-h-[42px]"><Save className="w-4 h-4" /><span>Simpan Pasien</span></button>
+            <button type="submit" className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold transition-colors shadow-sm cursor-pointer min-h-[42px]"><Save className="w-4 h-4" /><span>Simpan Pasien</span></button>
           </div>
         </form>
       </div>

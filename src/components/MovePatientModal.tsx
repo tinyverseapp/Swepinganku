@@ -26,7 +26,7 @@ export function MovePatientModal({ patient, currentDate, onClose, onConfirm }: M
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
               <CalendarDays className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -55,12 +55,12 @@ export function MovePatientModal({ patient, currentDate, onClose, onConfirm }: M
                 type="date"
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-blue-200 bg-white text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="w-full px-3 py-2.5 rounded-xl border border-teal-200 bg-white text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
               />
             </div>
           </div>
 
-          <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 leading-relaxed">
+          <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-xs text-teal-900 leading-relaxed">
             Data pasien akan dihapus dari tanggal asal dan dipindahkan ke tanggal yang dipilih. Perubahan juga akan disinkronkan ke anggota tim melalui Firebase.
           </div>
         </div>
@@ -73,7 +73,7 @@ export function MovePatientModal({ patient, currentDate, onClose, onConfirm }: M
             type="button"
             disabled={sameDate}
             onClick={() => onConfirm(targetDate)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs font-bold shadow-sm disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs font-bold shadow-sm disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             <MoveRight className="w-4 h-4" />
             Pindahkan Pasien

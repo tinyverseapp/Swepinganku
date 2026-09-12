@@ -78,9 +78,9 @@ export function NextjsRepoModal({ isOpen, onClose }: NextjsRepoModalProps) {
         </div>
 
         {/* Highlight Banner with Direct ZIP Download */}
-        <div className="mt-3.5 bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200/70 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="mt-3.5 bg-gradient-to-r from-teal-50/80 via-cyan-50/50 to-emerald-50 border border-teal-200/70 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-2.5">
-            <Sparkles className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <Sparkles className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
             <div className="text-xs">
               <span className="font-bold text-slate-900">
                 Unduh Repositori Lengkap Langsung (ZIP)
@@ -117,12 +117,12 @@ export function NextjsRepoModal({ isOpen, onClose }: NextjsRepoModalProps) {
                     onClick={() => setSelectedFile(f)}
                     className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center justify-between gap-1.5 transition-colors cursor-pointer min-h-[34px] ${
                       isSelected
-                        ? 'bg-blue-600 text-white font-bold shadow-xs'
+                        ? 'bg-teal-700 text-white font-bold shadow-xs'
                         : 'text-slate-700 hover:bg-slate-200/60'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 truncate">
-                      <FileCode className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
+                      <FileCode className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-teal-600'}`} />
                       <span className="truncate">{f.path}</span>
                     </div>
                   </button>
@@ -154,7 +154,7 @@ export function NextjsRepoModal({ isOpen, onClose }: NextjsRepoModalProps) {
             </div>
 
             {/* Viewer Content */}
-            <div className="flex-1 overflow-auto p-3.5 text-xs font-mono leading-relaxed text-slate-200 selection:bg-blue-600 selection:text-white">
+            <div className="flex-1 overflow-auto p-3.5 text-xs font-mono leading-relaxed text-slate-200 selection:bg-teal-600 selection:text-white">
               <pre className="whitespace-pre">{selectedFile.content}</pre>
             </div>
           </div>

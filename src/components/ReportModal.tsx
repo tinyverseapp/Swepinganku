@@ -60,7 +60,7 @@ export function ReportModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
               <MessageSquare className="w-4 h-4" />
             </div>
             <div>
@@ -82,7 +82,7 @@ export function ReportModal({
         </div>
 
         {/* Monospace Code Preview */}
-        <div className="mt-3 flex-1 overflow-auto bg-slate-900 text-slate-200 p-3.5 sm:p-4 rounded-xl font-mono text-xs leading-relaxed whitespace-pre-wrap selection:bg-blue-600 selection:text-white border border-slate-800">
+        <div className="mt-3 flex-1 overflow-auto bg-slate-900 text-slate-200 p-3.5 sm:p-4 rounded-xl font-mono text-xs leading-relaxed whitespace-pre-wrap selection:bg-teal-600 selection:text-white border border-slate-800">
           {reportText}
         </div>
 
@@ -101,7 +101,7 @@ export function ReportModal({
             <button
               type="button"
               onClick={handleCopy}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer min-h-[42px]"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer min-h-[42px]"
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? 'Tersalin' : 'Copy Teks'}</span>

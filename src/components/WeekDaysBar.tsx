@@ -175,7 +175,7 @@ export function WeekDaysBar({
       {/* Header with Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+          <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold">
             <Calendar className="w-4 h-4" />
           </div>
           <div>
@@ -212,7 +212,7 @@ export function WeekDaysBar({
             className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors ${
               isCurrentWeek
                 ? 'bg-slate-100 text-slate-700 border-slate-200'
-                : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
             }`}
           >
             Hari Ini
@@ -240,7 +240,7 @@ export function WeekDaysBar({
                 onClick={() => onSelectDate(w.date)}
                 className={`w-full flex flex-col items-center justify-between p-1 sm:p-2 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden min-h-[66px] sm:min-h-[70px] ${
                   isSelected
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
+                    ? 'bg-teal-700 border-teal-700 text-white shadow-sm ring-2 ring-teal-500/30'
                     : w.isToday
                     ? 'bg-emerald-50/60 border-emerald-300 text-slate-800 hover:bg-emerald-100/50'
                     : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300'
@@ -272,7 +272,7 @@ export function WeekDaysBar({
                     isSelected
                       ? 'bg-white/20 text-white'
                       : count > 0
-                      ? 'bg-blue-100 text-blue-800'
+                      ? 'bg-teal-100 text-teal-800'
                       : 'bg-slate-200/60 text-slate-500'
                   }`}
                 >

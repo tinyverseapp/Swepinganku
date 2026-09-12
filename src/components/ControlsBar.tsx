@@ -105,7 +105,7 @@ export function ControlsBar({
             <button
               type="button"
               onClick={onOpenTeamModal}
-              className="flex-1 sm:flex-initial px-3 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer min-h-[38px]"
+              className="flex-1 sm:flex-initial px-3 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer min-h-[38px]"
             >
               <span>Ganti Tim / PIN</span>
             </button>
@@ -123,7 +123,7 @@ export function ControlsBar({
             type="date"
             value={date}
             onChange={(e) => onDateChange(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer min-h-[42px]"
+            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer min-h-[42px]"
           />
         </div>
         <div>
@@ -137,7 +137,7 @@ export function ControlsBar({
           <select
             value={effectiveDivision}
             onChange={(e) => onDivisionChange(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer min-h-[42px]"
+            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer min-h-[42px]"
           >
             {visibleDivisions.map((d) => (
               <option key={d} value={d}>
@@ -148,25 +148,25 @@ export function ControlsBar({
         </div>
         <div className="sm:col-span-2 lg:col-span-2">
           <label className="block text-xs font-bold text-slate-700 mb-1.5">Cari Pasien (Nama, No. RM, Diagnosis, Ruangan, Kamar)</label>
-          <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 sm:top-2.5" /><input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Ketik nama pasien / no RM / diagnosis..." className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3.5 py-2.5 sm:py-2 text-sm sm:text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[42px]" /></div>
+          <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 sm:top-2.5" /><input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Ketik nama pasien / no RM / diagnosis..." className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3.5 py-2.5 sm:py-2 text-sm sm:text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all min-h-[42px]" /></div>
         </div>
       </div>
 
       <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold"><Sparkles className="w-3.5 h-3.5 text-blue-600" /><span>Aksi &amp; Rekap:</span></div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold"><Sparkles className="w-3.5 h-3.5 text-teal-600" /><span>Aksi &amp; Rekap:</span></div>
         <div className="flex flex-wrap items-center gap-2">
           {onOpenAiImport && (
             <button
               type="button"
               onClick={onOpenAiImport}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
               title="Salin & Tempel Catatan Teks untuk Diubah Menjadi Pasien Otomatis oleh AI"
             >
-              <Sparkle className="w-3.5 h-3.5 shrink-0" />
+              <Sparkle className="w-3.5 h-3.5 text-teal-300 shrink-0" />
               <span>AI Impor Catatan</span>
             </button>
           )}
-          {onAddPatient && <button type="button" onClick={onAddPatient} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Tambah Pasien Baru"><UserPlus className="w-4 h-4 shrink-0" /><span>Tambah Pasien</span></button>}
+          {onAddPatient && <button type="button" onClick={onAddPatient} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Tambah Pasien Baru"><UserPlus className="w-4 h-4 shrink-0" /><span>Tambah Pasien</span></button>}
           <button type="button" onClick={onOpenWeekly} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]" title="Lihat Rekapitulasi Mingguan dan Ekspor Excel/CSV"><FileSpreadsheet className="w-4 h-4 text-emerald-100 shrink-0" /><span>Rekap Mingguan &amp; CSV</span></button>
         </div>
       </div>
