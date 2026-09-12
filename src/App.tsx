@@ -105,49 +105,21 @@ export default function App() {
   };
   const handleMovePatient = async (patient: Patient, targetDate: string) => {
     if (!targetDate || targetDate === date) return;
-
     const targetPatients = loadPatients(targetDate, division, activeTeam.teamCode);
     const patientRm = patient.rm?.trim().toLowerCase();
     const duplicate = targetPatients.some((p) => {
       const targetRm = p.rm?.trim().toLowerCase();
       return patientRm && targetRm === patientRm;
     });
-
-    if (duplicate) {
-      showToast(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${targetDate}.`);
-      return;
-    }
-
-    const movedPatient: Patient = {
-      ...patient,
-      teamCode: activeTeam.teamCode,
-      date: targetDate,
-      division,
-      updatedAt: new Date().toISOString()
-    };
+    if (duplicate) { showToast(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${targetDate}.`); return; }
+    const movedPatient: Patient = { ...patient, teamCode: activeTeam.teamCode, date: targetDate, division, updatedAt: new Date().toISOString() };
     const sourceUpdated = patients.filter((p) => p.id !== patient.id);
     const targetUpdated = [movedPatient, ...targetPatients];
-
-    // Update local data immediately so the current card disappears without waiting for Firebase.
-    setPatients(sourceUpdated);
-    savePatients(date, division, sourceUpdated, activeTeam.teamCode);
-    savePatients(targetDate, division, targetUpdated, activeTeam.teamCode);
-    setMovingPatient(null);
-
+    setPatients(sourceUpdated); savePatients(date, division, sourceUpdated, activeTeam.teamCode); savePatients(targetDate, division, targetUpdated, activeTeam.teamCode); setMovingPatient(null);
     if (activeTeam.teamCode) {
-      try {
-        await movePatientToDateFirestore(patient, activeTeam.teamCode, date, targetDate);
-        showToast(`${patient.name} dipindahkan ke ${targetDate} dan tersinkron ke Firebase.`);
-      } catch (error: any) {
-        // Restore the source locally if the remote move fails.
-        setPatients(patients);
-        savePatients(date, division, patients, activeTeam.teamCode);
-        savePatients(targetDate, division, targetPatients, activeTeam.teamCode);
-        showToast(`Gagal memindahkan pasien: ${error?.message || 'sinkronisasi Firebase gagal.'}`);
-      }
-    } else {
-      showToast(`${patient.name} dipindahkan ke ${targetDate}.`);
-    }
+      try { await movePatientToDateFirestore(patient, activeTeam.teamCode, date, targetDate); showToast(`${patient.name} dipindahkan ke ${targetDate} dan tersinkron ke Firebase.`); }
+      catch (error: any) { setPatients(patients); savePatients(date, division, patients, activeTeam.teamCode); savePatients(targetDate, division, targetPatients, activeTeam.teamCode); showToast(`Gagal memindahkan pasien: ${error?.message || 'sinkronisasi Firebase gagal.'}`); }
+    } else showToast(`${patient.name} dipindahkan ke ${targetDate}.`);
   };
   const handleQuickSharePatient = async (patient: Patient) => {
     const formattedName = formatPatientNameWithHonorific(patient.name, patient.age, patient.jk); const location = formatKamarOrBed(patient.room, patient.kamar);
@@ -164,35 +136,63 @@ export default function App() {
     const raw = localStorage.getItem(getStorageKey(fromDate, division, activeTeam.teamCode)); if (!raw) { showToast(`Data pada hari ${dayName} (${fromDate}) masih kosong.`); return; }
     try { const sourcePatients: Patient[] = JSON.parse(raw); const currentRms = new Set(patients.map((p) => p.rm.trim().toLowerCase())); const toAdd = sourcePatients.filter((p) => !currentRms.has(p.rm.trim().toLowerCase())).map((p) => ({ ...p, id: `pt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, teamCode: activeTeam.teamCode, date, division, updatedAt: new Date().toISOString() })); if (!toAdd.length) { showToast(`Semua pasien dari hari ${dayName} sudah ada.`); return; } const merged = [...patients, ...toAdd]; setPatients(merged); savePatients(date, division, merged, activeTeam.teamCode); savePatientsBatch(activeTeam.teamCode, date, merged).then(() => showToast(`Berhasil menyalin ${toAdd.length} pasien dan sinkron ke Firebase.`)).catch((error) => showToast(`Data disalin lokal, tetapi Firebase gagal: ${error.message}`)); } catch { showToast('Gagal memproses data salinan.'); }
   };
-  const handleImportAiPatients = (newPatients: Patient[]) => {
+
+  // AI import is remote-first. The previous implementation wrote the merged local
+  // list and then replaced the Firestore list. A realtime snapshot could arrive
+  // between those operations with the old list, making the freshly imported cards
+  // appear briefly and then disappear. Each AI patient is now upserted independently
+  // using its stable ID, so no AI import can delete or overwrite unrelated patients.
+  const handleImportAiPatients = async (newPatients: Patient[]) => {
     if (!newPatients || newPatients.length === 0) return;
-    const existingMap = new Map<string, Patient>();
+    const existingByRm = new Map<string, Patient>();
     patients.forEach((p) => {
-      const key = p.rm?.trim() ? p.rm.trim().toLowerCase() : p.id;
-      existingMap.set(key, p);
+      const rm = p.rm?.trim().toLowerCase();
+      if (rm) existingByRm.set(rm, p);
     });
-    newPatients.forEach((np) => {
-      const pWithMeta: Patient = {
+
+    const importedPatients: Patient[] = newPatients.map((np) => {
+      const existing = np.rm?.trim() ? existingByRm.get(np.rm.trim().toLowerCase()) : undefined;
+      return {
         ...np,
+        id: existing?.id || np.id,
         teamCode: activeTeam.teamCode,
         date,
         division,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      const key = np.rm?.trim() ? np.rm.trim().toLowerCase() : np.id;
-      existingMap.set(key, pWithMeta);
     });
-    const updated = Array.from(existingMap.values());
-    setPatients(updated);
-    savePatients(date, division, updated, activeTeam.teamCode);
-    if (activeTeam.teamCode) {
-      savePatientsBatch(activeTeam.teamCode, date, updated)
-        .then(() => showToast(`Berhasil menyimpan ${newPatients.length} pasien dari AI dan tersinkron ke Firebase.`))
-        .catch((error) => showToast(`Tersimpan lokal, sinkronisasi Firebase gagal: ${error.message}`));
-    } else {
-      showToast(`Berhasil menyimpan ${newPatients.length} pasien dari AI ke database.`);
+
+    if (!activeTeam.teamCode) {
+      const localMap = new Map<string, Patient>();
+      patients.forEach((p) => localMap.set(p.rm?.trim().toLowerCase() || p.id, p));
+      importedPatients.forEach((p) => localMap.set(p.rm?.trim().toLowerCase() || p.id, p));
+      const updated = Array.from(localMap.values());
+      setPatients(updated);
+      savePatients(date, division, updated);
+      showToast(`Berhasil menyimpan ${importedPatients.length} pasien dari AI.`);
+      return;
+    }
+
+    try {
+      // Do not call savePatientsBatch here. It is a list-level operation and is
+      // unsafe for an import that is concurrently observed by onSnapshot.
+      await Promise.all(importedPatients.map((patient) => upsertPatientToFirestore(patient, activeTeam.teamCode, date)));
+
+      // Firebase is now authoritative. Update local cache after all remote writes
+      // have succeeded; the realtime listener will also reconcile this state.
+      const merged = new Map<string, Patient>();
+      patients.forEach((p) => merged.set(p.rm?.trim().toLowerCase() || p.id, p));
+      importedPatients.forEach((p) => merged.set(p.rm?.trim().toLowerCase() || p.id, p));
+      const updated = Array.from(merged.values());
+      setPatients(updated);
+      savePatients(date, division, updated, activeTeam.teamCode);
+      showToast(`Berhasil menyimpan ${importedPatients.length} pasien dari AI dan tersinkron ke Firebase.`);
+    } catch (error: any) {
+      // Never leave a local-only state that will be overwritten by realtime data.
+      showToast(`Impor AI gagal tersimpan ke Firebase: ${error?.message || 'sinkronisasi gagal.'}`);
     }
   };
+
   const handleDateChange = useCallback((newDate: string) => setDate(newDate), []);
   const handleSwitchTeam = (newTeam: DivisionTeam, carryOverFromYesterday: boolean) => {
     setActiveTeam(newTeam); saveCurrentTeam(newTeam); saveJoinedTeam(newTeam); setDivision(newTeam.division); const refreshed = loadPatients(date, newTeam.division, newTeam.teamCode); setPatients(refreshed);
