@@ -1,4 +1,3 @@
-import { Patient } from '../types';
 import { auth } from './firebase';
 
 export interface ParsedPatientRaw {
@@ -21,15 +20,12 @@ export interface ParseResponse {
   error?: string;
 }
 
-/**
- * Sends unstructured patient notes to the authenticated server-side AI endpoint.
- * AI output is treated as a draft and never invents unknown sex/doctor-role data.
- */
 export async function parsePatientsWithAi(
   text: string,
   division: string,
   knownRooms: string[] = [],
-  knownDpjps: string[] = []
+  knownDpjps: string[] = [],
+  knownPediatricDpjps: string[] = []
 ): Promise<ParsedPatientRaw[]> {
   let response: Response;
   try {
@@ -43,7 +39,7 @@ export async function parsePatientsWithAi(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ text, division, knownRooms, knownDpjps }),
+      body: JSON.stringify({ text, division, knownRooms, knownDpjps, knownPediatricDpjps }),
     });
   } catch (netErr: any) {
     if (netErr?.message?.includes('Sesi login')) throw netErr;
