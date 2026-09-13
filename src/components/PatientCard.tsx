@@ -19,12 +19,17 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQui
   const formattedLocation = formatKamarOrBed(patient.room, patient.kamar);
   const doctorRole = patient.doctorRole || 'DPJP';
   const roleLabel = doctorRole === 'RABER' ? 'Raber' : doctorRole === 'KONSUL' ? 'Konsul' : 'DPJP';
-  const isMarkedPulang = patient.presenceStatus === 'pulang';
+  const status = patient.presenceStatus || 'belum_periksa';
+  const isMarkedPulang = status === 'pulang';
+  const isMarkedAda = status === 'ada';
+  const isBelumPeriksa = status === 'belum_periksa';
 
   return (
     <div className={`bg-white rounded-xl shadow-xs transition-all flex flex-col justify-between ${
       isMarkedPulang
         ? 'border-2 border-amber-300 ring-1 ring-amber-200/70 bg-amber-50/15'
+        : isMarkedAda
+        ? 'border border-emerald-300/80 hover:border-emerald-400 bg-emerald-50/10'
         : 'border border-slate-200 hover:border-slate-300'
     } ${isCompact ? 'p-2.5 sm:p-3 space-y-2' : 'p-4'}`}>
       <div>
@@ -32,9 +37,19 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQui
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <h4 className={`font-bold text-slate-900 leading-snug truncate ${isCompact ? 'text-xs sm:text-[13px]' : 'text-sm'}`} title={patient.name}>{patient.name}</h4>
-              {isMarkedPulang && (
+              {isMarkedPulang ? (
                 <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                   Tanda Pulang
+                </span>
+              ) : isBelumPeriksa ? (
+                <span className="text-[9.5px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 shrink-0 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                  <span>Belum Dicek</span>
+                </span>
+              ) : (
+                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span>Masih Ada</span>
                 </span>
               )}
             </div>
@@ -63,7 +78,7 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQui
       </div>
 
       <div className={`border-t border-slate-100 flex items-center justify-between gap-2 ${isCompact ? 'mt-2 pt-1.5' : 'mt-3.5 pt-2.5'}`}>
-        {/* Tombol Tanda Sweeping Pagi (Hijau jika masih ada, Kuning/Amber jika rencana pulang) */}
+        {/* Tombol Tanda Sweeping Pagi (Belum Dicek / Masih Ada / Tanda Pulang) */}
         <button
           type="button"
           onClick={(e) => {
@@ -73,25 +88,41 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQui
           className={`inline-flex items-center gap-1.5 font-bold rounded-lg border transition-all cursor-pointer select-none ${
             isMarkedPulang
               ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+              : isBelumPeriksa
+              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
               : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
           } ${isCompact ? 'text-[10.5px] px-2 py-1 min-h-[28px]' : 'text-xs px-2.5 py-1.5 min-h-[32px]'}`}
           title={
             isMarkedPulang
-              ? 'Status: Tanda Pulang (menunggu evaluasi residen). Klik untuk ubah jadi Masih Ada.'
-              : 'Status: Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
+              ? 'Status: Tanda Rencana Pulang. Klik untuk ubah jadi Belum Dicek.'
+              : isBelumPeriksa
+              ? 'Status: Belum Diperiksa/Dicek di ruangan. Klik untuk tandai Sudah Dicek (Masih Ada).'
+              : 'Status: Sudah Dicek / Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
           }
           aria-label={
             isMarkedPulang
-              ? `Tandai ${patient.name} masih ada di ruangan`
+              ? `Tandai ${patient.name} belum dicek`
+              : isBelumPeriksa
+              ? `Tandai ${patient.name} sudah dicek / masih ada`
               : `Tandai ${patient.name} rencana pulang`
           }
         >
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${
-              isMarkedPulang ? 'bg-amber-500' : 'bg-emerald-500'
+              isMarkedPulang
+                ? 'bg-amber-500'
+                : isBelumPeriksa
+                ? 'bg-slate-400'
+                : 'bg-emerald-500'
             }`}
           />
-          <span>{isMarkedPulang ? 'Tanda Pulang' : 'Masih Ada'}</span>
+          <span>
+            {isMarkedPulang
+              ? 'Tanda Pulang'
+              : isBelumPeriksa
+              ? 'Belum Dicek'
+              : 'Masih Ada'}
+          </span>
         </button>
 
         <div className="flex items-center gap-0.5 sm:gap-1">

@@ -49,7 +49,7 @@ export default function App() {
   const [pageMode, setPageMode] = useState<PageMode>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDpjpFilter, setSelectedDpjpFilter] = useState('all');
-  const [presenceFilter, setPresenceFilter] = useState<'all' | 'ada' | 'pulang'>('all');
+  const [presenceFilter, setPresenceFilter] = useState<'all' | 'belum_periksa' | 'ada' | 'pulang'>('all');
   const [patients, setPatients] = useState<Patient[]>(() => initialTeam.teamCode && initialTeam.division ? loadPatients(today(), initialTeam.division, initialTeam.teamCode) : []);
   const [activeTeam, setActiveTeam] = useState<DivisionTeam>(initialTeam);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -101,7 +101,16 @@ export default function App() {
     setActiveTeam(joinedTeam); saveCurrentTeam(joinedTeam); setDivision(joinedTeam.division); setSearchQuery(''); setSelectedDpjpFilter('all'); setPresenceFilter('all');
   };
   const handleTogglePresenceStatus = (patient: Patient) => {
-    const nextStatus: 'ada' | 'pulang' = patient.presenceStatus === 'pulang' ? 'ada' : 'pulang';
+    const current = patient.presenceStatus || 'belum_periksa';
+    let nextStatus: 'belum_periksa' | 'ada' | 'pulang' = 'ada';
+    if (current === 'belum_periksa') {
+      nextStatus = 'ada';
+    } else if (current === 'ada') {
+      nextStatus = 'pulang';
+    } else {
+      nextStatus = 'belum_periksa';
+    }
+
     const updatedPatient: Patient = {
       ...patient,
       presenceStatus: nextStatus,
@@ -116,13 +125,22 @@ export default function App() {
       });
     }
     showToast(
-      nextStatus === 'pulang'
+      nextStatus === 'ada'
+        ? `Tanda: ${patient.name} ditandai sudah dicek / masih ada di ruangan.`
+        : nextStatus === 'pulang'
         ? `Tanda: ${patient.name} ditandai rencana pulang. (Hapus via tombol jika residen sudah ACC)`
-        : `Tanda: ${patient.name} ditandai masih ada di ruangan.`
+        : `Tanda: ${patient.name} ditandai belum dicek di ruangan.`
     );
   };
   const handleSavePatient = (patientData: Patient) => {
-    const patient: Patient = { ...patientData, teamCode: activeTeam.teamCode, date, division, updatedAt: new Date().toISOString() };
+    const patient: Patient = {
+      ...patientData,
+      presenceStatus: patientData.presenceStatus || 'belum_periksa',
+      teamCode: activeTeam.teamCode,
+      date,
+      division,
+      updatedAt: new Date().toISOString()
+    };
     const existingIndex = patients.findIndex((p) => p.id === patient.id);
     const updated = existingIndex >= 0 ? patients.map((p, index) => index === existingIndex ? patient : p) : [patient, ...patients];
     setPatients(updated); savePatients(date, division, updated, activeTeam.teamCode); setIsPatientModalOpen(false); setEditingPatient(null);
@@ -159,7 +177,7 @@ export default function App() {
       return patientRm && targetRm === patientRm;
     });
     if (duplicate) { showToast(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${targetDate}.`); return; }
-    const movedPatient: Patient = { ...patient, teamCode: activeTeam.teamCode, date: targetDate, division, updatedAt: new Date().toISOString() };
+    const movedPatient: Patient = { ...patient, presenceStatus: 'belum_periksa', teamCode: activeTeam.teamCode, date: targetDate, division, updatedAt: new Date().toISOString() };
     const sourceUpdated = patients.filter((p) => p.id !== patient.id);
     const targetUpdated = [movedPatient, ...targetPatients];
     setPatients(sourceUpdated); savePatients(date, division, sourceUpdated, activeTeam.teamCode); savePatients(targetDate, division, targetUpdated, activeTeam.teamCode); setMovingPatient(null);
@@ -196,7 +214,7 @@ export default function App() {
   };
   const handleCopyFromDay = (fromDate: string, dayName: string) => {
     const raw = localStorage.getItem(getStorageKey(fromDate, division, activeTeam.teamCode)); if (!raw) { showToast(`Data pada hari ${dayName} (${fromDate}) masih kosong.`); return; }
-    try { const sourcePatients: Patient[] = JSON.parse(raw); const currentRms = new Set(patients.map((p) => p.rm.trim().toLowerCase())); const toAdd = sourcePatients.filter((p) => !currentRms.has(p.rm.trim().toLowerCase())).map((p) => ({ ...p, id: `pt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, teamCode: activeTeam.teamCode, date, division, updatedAt: new Date().toISOString() })); if (!toAdd.length) { showToast(`Semua pasien dari hari ${dayName} sudah ada.`); return; } const merged = [...patients, ...toAdd]; setPatients(merged); savePatients(date, division, merged, activeTeam.teamCode); savePatientsBatch(activeTeam.teamCode, date, merged).then(() => showToast(`Berhasil menyalin ${toAdd.length} pasien dan sinkron ke Firebase.`)).catch((error) => showToast(`Data disalin lokal, tetapi Firebase gagal: ${error.message}`)); } catch { showToast('Gagal memproses data salinan.'); }
+    try { const sourcePatients: Patient[] = JSON.parse(raw); const currentRms = new Set(patients.map((p) => p.rm.trim().toLowerCase())); const toAdd = sourcePatients.filter((p) => !currentRms.has(p.rm.trim().toLowerCase())).map((p) => ({ ...p, id: `pt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, teamCode: activeTeam.teamCode, date, division, presenceStatus: 'belum_periksa' as const, updatedAt: new Date().toISOString() })); if (!toAdd.length) { showToast(`Semua pasien dari hari ${dayName} sudah ada.`); return; } const merged = [...patients, ...toAdd]; setPatients(merged); savePatients(date, division, merged, activeTeam.teamCode); savePatientsBatch(activeTeam.teamCode, date, merged).then(() => showToast(`Berhasil menyalin ${toAdd.length} pasien dan sinkron ke Firebase.`)).catch((error) => showToast(`Data disalin lokal, tetapi Firebase gagal: ${error.message}`)); } catch { showToast('Gagal memproses data salinan.'); }
   };
 
   // AI import is remote-first. The previous implementation wrote the merged local
@@ -217,6 +235,7 @@ export default function App() {
       return {
         ...np,
         id: existing?.id || np.id,
+        presenceStatus: existing?.presenceStatus || np.presenceStatus || 'belum_periksa',
         teamCode: activeTeam.teamCode,
         date,
         division,
@@ -279,14 +298,17 @@ export default function App() {
 
   const filteredPatients = useMemo(() => patients.filter((p) => {
     if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;
-    if (presenceFilter === 'ada' && p.presenceStatus === 'pulang') return false;
-    if (presenceFilter === 'pulang' && p.presenceStatus !== 'pulang') return false;
+    const status = p.presenceStatus || 'belum_periksa';
+    if (presenceFilter === 'belum_periksa' && status !== 'belum_periksa') return false;
+    if (presenceFilter === 'ada' && status !== 'ada') return false;
+    if (presenceFilter === 'pulang' && status !== 'pulang') return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return p.name.toLowerCase().includes(q) || p.rm.toLowerCase().includes(q) || p.dx.toLowerCase().includes(q) || p.dpjp.toLowerCase().includes(q) || p.supervisingDpjp?.toLowerCase().includes(q) || p.room.toLowerCase().includes(q) || p.kamar.toLowerCase().includes(q);
   }), [patients, selectedDpjpFilter, presenceFilter, searchQuery]);
   const totalCount = patients.length;
-  const adaCount = useMemo(() => patients.filter((p) => p.presenceStatus !== 'pulang').length, [patients]);
+  const belumCount = useMemo(() => patients.filter((p) => !p.presenceStatus || p.presenceStatus === 'belum_periksa').length, [patients]);
+  const adaCount = useMemo(() => patients.filter((p) => p.presenceStatus === 'ada').length, [patients]);
   const pulangCount = useMemo(() => patients.filter((p) => p.presenceStatus === 'pulang').length, [patients]);
 
   return <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col selection:bg-teal-100 selection:text-teal-900">
@@ -317,13 +339,28 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setPresenceFilter('belum_periksa')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    presenceFilter === 'belum_periksa'
+                      ? 'bg-slate-700 text-white shadow-2xs'
+                      : belumCount > 0
+                      ? 'text-slate-700 hover:bg-slate-200/80'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                  title="Filter pasien yang belum dicek di ruangan"
+                >
+                  <span className={`w-2 h-2 rounded-full ${presenceFilter === 'belum_periksa' ? 'bg-white' : 'bg-slate-400'}`} />
+                  <span>Belum Dicek ({belumCount})</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPresenceFilter('ada')}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                     presenceFilter === 'ada'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'text-emerald-800 hover:bg-emerald-50'
                   }`}
-                  title="Filter pasien yang masih ada di ruangan"
+                  title="Filter pasien yang sudah dicek / masih ada di ruangan"
                 >
                   <span className={`w-2 h-2 rounded-full ${presenceFilter === 'ada' ? 'bg-white' : 'bg-emerald-500'}`} />
                   <span>Masih Ada ({adaCount})</span>

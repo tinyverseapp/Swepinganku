@@ -15,7 +15,24 @@ interface DocumentSweepingViewProps {
 
 export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, onTogglePresence, onDeletePatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
-  const [includeEmptyRooms, setIncludeEmptyRooms] = useState(true);
+  const [includeEmptyRooms, setIncludeEmptyRooms] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sweepinganku:includeEmptyRooms');
+      if (saved !== null) return saved === 'true';
+    }
+    return false; // Default: OFF (ruang kosong tidak ditampilkan)
+  });
+
+  const handleToggleEmptyRooms = () => {
+    setIncludeEmptyRooms((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sweepinganku:includeEmptyRooms', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [copied, setCopied] = useState(false);
   const [copyFormatFeedback, setCopyFormatFeedback] = useState<'all' | 'filled' | null>(null);
   const [isCopyDropdownOpen, setIsCopyDropdownOpen] = useState(false);
@@ -72,7 +89,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
     return [...base, ...custom];	
   }, [allRooms, currentTabPatients]);
 
-  const handleCopyWA = async (withEmptyRooms: boolean = true) => {
+  const handleCopyWA = async (withEmptyRooms: boolean = includeEmptyRooms) => {
     const text = generateDocSweepingReportText({
       mode: activeTab === 'all' ? 'all' : 'dpjp',
       date,
@@ -191,7 +208,19 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
             <span>Operan Pasien</span>
           </button>
         )}
-        <button onClick={() => setIncludeEmptyRooms(!includeEmptyRooms)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-50/80 text-teal-800 border border-teal-200 min-h-[36px]"><SlidersHorizontal className="w-3.5 h-3.5" />R. Kosong (0): {includeEmptyRooms ? 'On' : 'Off'}</button>
+        <button
+          type="button"
+          onClick={handleToggleEmptyRooms}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border min-h-[36px] transition-colors cursor-pointer ${
+            includeEmptyRooms
+              ? 'bg-teal-50/90 text-teal-800 border-teal-300'
+              : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200/80'
+          }`}
+          title={includeEmptyRooms ? 'Ruangan kosong sedang ditampilkan (On). Klik untuk sembunyikan.' : 'Ruangan kosong disembunyikan (Off). Klik untuk tampilkan.'}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span>R. Kosong (0): <strong className={includeEmptyRooms ? 'text-teal-700 font-bold' : 'text-slate-500 font-bold'}>{includeEmptyRooms ? 'On' : 'Off'}</strong></span>
+        </button>
         <button onClick={onAddPatient} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white min-h-[36px] transition-colors shrink-0 shadow-2xs cursor-pointer"><Plus className="w-4 h-4" />Tambah Pasien</button>
       </div>
     </header>
@@ -228,20 +257,33 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                 const role = getRoleLabel(patient);
                 const doctorName = patient.dpjp || '-';
                 const mainDpjp = patient.supervisingDpjp || '';
-                const isMarkedPulang = patient.presenceStatus === 'pulang';
+                const status = patient.presenceStatus || 'belum_periksa';
+                const isMarkedPulang = status === 'pulang';
+                const isMarkedAda = status === 'ada';
+                const isBelumPeriksa = status === 'belum_periksa';
 
-                return <li key={patient.id} className={`group p-2 -mx-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${isMarkedPulang ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-teal-50/50'}`}>
+                return <li key={patient.id} className={`group p-2 -mx-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${
+                  isMarkedPulang
+                    ? 'bg-amber-50/60 hover:bg-amber-50'
+                    : isBelumPeriksa
+                    ? 'hover:bg-slate-100/70'
+                    : 'bg-emerald-50/25 hover:bg-emerald-50/50'
+                }`}>
                   <div className="flex-1 leading-tight">
                     <div className="flex items-baseline flex-wrap gap-y-0.5">
                       <span className="font-semibold mr-1.5">{idx + 1}.</span>
                       <span className="font-medium">{bedOrKamar}</span>
                       <span className="text-slate-400 mx-1">/</span>
                       <span className="font-bold">{formattedName}</span>
-                      {isMarkedPulang && (
+                      {isMarkedPulang ? (
                         <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
                           Tanda Pulang
                         </span>
-                      )}
+                      ) : isBelumPeriksa ? (
+                        <span className="ml-1.5 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                          Belum Dicek
+                        </span>
+                      ) : null}
                       <span className="text-slate-400 mx-1">/</span>
                       <span>{patient.jk || '-'}</span>
                       <span className="text-slate-400 mx-1">/</span>
@@ -262,16 +304,32 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
                         isMarkedPulang
                           ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                          : isBelumPeriksa
+                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                           : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}
                       title={
                         isMarkedPulang
-                          ? 'Tanda Pulang. Klik untuk kembalikan ke Masih Ada.'
+                          ? 'Tanda Rencana Pulang. Klik untuk ubah jadi Belum Dicek.'
+                          : isBelumPeriksa
+                          ? 'Belum Diperiksa di ruangan. Klik untuk tandai Masih Ada (Sudah Dicek).'
                           : 'Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
                       }
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${isMarkedPulang ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="hidden sm:inline">{isMarkedPulang ? 'Tanda Pulang' : 'Masih Ada'}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        isMarkedPulang
+                          ? 'bg-amber-500'
+                          : isBelumPeriksa
+                          ? 'bg-slate-400'
+                          : 'bg-emerald-500'
+                      }`} />
+                      <span className="hidden sm:inline">
+                        {isMarkedPulang
+                          ? 'Tanda Pulang'
+                          : isBelumPeriksa
+                          ? 'Belum Dicek'
+                          : 'Masih Ada'}
+                      </span>
                     </button>
                     <button
                       type="button"

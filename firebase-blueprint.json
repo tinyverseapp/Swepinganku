@@ -72,8 +72,8 @@
         },
         "presenceStatus": {
           "type": "string",
-          "description": "Status tanda sweeping pagi: ada (masih ada di ruangan) atau pulang (tanda sudah pulang/rencana pulang)",
-          "enum": ["ada", "pulang"]
+          "description": "Status tanda sweeping pagi: belum_periksa (belum dicek di ruangan), ada (masih ada di ruangan), atau pulang (tanda sudah pulang/rencana pulang)",
+          "enum": ["belum_periksa", "ada", "pulang"]
         }
       },
       "required": ["id", "name", "jk", "rm", "room", "dpjp", "date", "division"]

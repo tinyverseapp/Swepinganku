@@ -45,14 +45,14 @@ export function PatientModal({
   const [age, setAge] = useState('');
   const [rm, setRm] = useState('');
   const [dx, setDx] = useState('');
-  const [presenceStatus, setPresenceStatus] = useState<'ada' | 'pulang'>('ada');
+  const [presenceStatus, setPresenceStatus] = useState<Patient['presenceStatus']>('belum_periksa');
 
   useEffect(() => {
     if (initialData) {
       setDpjp(initialData.dpjp || '');
       setDoctorRole(initialData.doctorRole || 'DPJP');
       setSupervisingDpjp(initialData.supervisingDpjp || '');
-      setPresenceStatus(initialData.presenceStatus || 'ada');
+      setPresenceStatus(initialData.presenceStatus || 'belum_periksa');
       const rawRoom = initialData.room || '';
       const normalized = normalizeRoomName(rawRoom);
       const isMaster = MASTER_ROOMS.some((r) => r.toLowerCase() === rawRoom.toLowerCase());
@@ -88,7 +88,7 @@ export function PatientModal({
       setAge('');
       setRm('');
       setDx('');
-      setPresenceStatus('ada');
+      setPresenceStatus('belum_periksa');
     }
   }, [initialData, defaultDpjp, isOpen]);
 
@@ -272,34 +272,46 @@ export function PatientModal({
                 <label className="font-bold text-slate-700">Tanda Sweeping Pagi</label>
                 <span className="text-[10.5px] text-slate-500 font-medium">Penanda visual saat sweeping ronde</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPresenceStatus('belum_periksa')}
+                  className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    presenceStatus === 'belum_periksa'
+                      ? 'bg-slate-200 border-slate-400 text-slate-800 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                  <span>Belum Dicek</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setPresenceStatus('ada')}
-                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     presenceStatus === 'ada'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span>Masih Ada di Ruangan (Hijau)</span>
+                  <span>Masih Ada</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPresenceStatus('pulang')}
-                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     presenceStatus === 'pulang'
                       ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                  <span>Tanda Rencana Pulang</span>
+                  <span>Tanda Pulang</span>
                 </button>
               </div>
               <p className="text-[10px] text-slate-500 leading-tight pt-0.5">
-                *Penanda ini hanya status saat sweeping pagi. Jika pasien pulang, penghapusan dari daftar tetap menggunakan tombol hapus setelah evaluasi bersama residen.
+                *Status sweeping: Pasien baru atau operan hari baru otomatis berstatus <b>Belum Dicek</b>. Tandai Masih Ada saat visite/sweeping di ruangan, atau Tanda Pulang jika menunggu evaluasi residen.
               </p>
             </div>
           </div>

@@ -16,7 +16,7 @@ export interface Patient {
   date?: string;
   division?: string;
   lastDate?: string;
-  presenceStatus?: 'ada' | 'pulang';
+  presenceStatus?: 'belum_periksa' | 'ada' | 'pulang';
 }
 
 export type ViewMode = 'dpjp' | 'all';
