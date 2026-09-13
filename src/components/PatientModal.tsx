@@ -45,12 +45,14 @@ export function PatientModal({
   const [age, setAge] = useState('');
   const [rm, setRm] = useState('');
   const [dx, setDx] = useState('');
+  const [presenceStatus, setPresenceStatus] = useState<'ada' | 'pulang'>('ada');
 
   useEffect(() => {
     if (initialData) {
       setDpjp(initialData.dpjp || '');
       setDoctorRole(initialData.doctorRole || 'DPJP');
       setSupervisingDpjp(initialData.supervisingDpjp || '');
+      setPresenceStatus(initialData.presenceStatus || 'ada');
       const rawRoom = initialData.room || '';
       const normalized = normalizeRoomName(rawRoom);
       const isMaster = MASTER_ROOMS.some((r) => r.toLowerCase() === rawRoom.toLowerCase());
@@ -86,6 +88,7 @@ export function PatientModal({
       setAge('');
       setRm('');
       setDx('');
+      setPresenceStatus('ada');
     }
   }, [initialData, defaultDpjp, isOpen]);
 
@@ -134,7 +137,8 @@ export function PatientModal({
       age: age.trim(),
       rm: rm.trim(),
       dx: dx.trim(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      presenceStatus
     };
     onSave(patient);
   };
@@ -261,6 +265,42 @@ export function PatientModal({
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Diagnosis Klinis, Tindakan Operasi &amp; Catatan Khusus</label>
               <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post Appendectomy Laparoskopi H+1, drain minimal kemerahan, flatus (+), diet bubur halus..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all leading-relaxed" />
+            </div>
+
+            <div className="sm:col-span-2 bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700">Tanda Sweeping Pagi</label>
+                <span className="text-[10.5px] text-slate-500 font-medium">Penanda visual saat sweeping ronde</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPresenceStatus('ada')}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    presenceStatus === 'ada'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>Masih Ada di Ruangan (Hijau)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresenceStatus('pulang')}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    presenceStatus === 'pulang'
+                      ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <span>Tanda Rencana Pulang</span>
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-tight pt-0.5">
+                *Penanda ini hanya status saat sweeping pagi. Jika pasien pulang, penghapusan dari daftar tetap menggunakan tombol hapus setelah evaluasi bersama residen.
+              </p>
             </div>
           </div>
 

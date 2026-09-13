@@ -22,7 +22,8 @@ service cloud.firestore {
         && (!('teamCode' in data) || (data.teamCode is string && data.teamCode.size() <= 50))
         && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50))
         && (!('doctorRole' in data) || data.doctorRole == 'DPJP' || data.doctorRole == 'RABER' || data.doctorRole == 'KONSUL')
-        && (!('supervisingDpjp' in data) || (data.supervisingDpjp is string && data.supervisingDpjp.size() <= 200));
+        && (!('supervisingDpjp' in data) || (data.supervisingDpjp is string && data.supervisingDpjp.size() <= 200))
+        && (!('presenceStatus' in data) || data.presenceStatus == 'ada' || data.presenceStatus == 'pulang');
     }
 
     function isValidTeam(data) {

@@ -2,17 +2,18 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
-import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2, ChevronDown, ClipboardList, Scissors } from 'lucide-react';
+import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2, ChevronDown, ClipboardList, Scissors, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
 interface DocumentSweepingViewProps {
   patients: Patient[]; date: string; division: string; koasName: string; dpjps: string[]; allRooms: string[];
   onDateChange?: (newDate: string) => void; onBackToDashboard: () => void; onAddPatient: () => void;
-  onEditPatient: (patient: Patient) => void; activeTeam?: DivisionTeam; onOpenTeamModal?: () => void;
+  onEditPatient: (patient: Patient) => void; onTogglePresence?: (patient: Patient) => void;
+  onDeletePatient?: (patient: Patient) => void; activeTeam?: DivisionTeam; onOpenTeamModal?: () => void;
   onHandoverPatients?: () => void; onOpenAiImport?: () => void;
 }
 
-export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
+export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, onTogglePresence, onDeletePatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [includeEmptyRooms, setIncludeEmptyRooms] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -227,22 +228,76 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                 const role = getRoleLabel(patient);
                 const doctorName = patient.dpjp || '-';
                 const mainDpjp = patient.supervisingDpjp || '';
-                return <li key={patient.id} className="group p-2 -mx-2 rounded-lg hover:bg-teal-50/50 flex items-start justify-between gap-3">
+                const isMarkedPulang = patient.presenceStatus === 'pulang';
+
+                return <li key={patient.id} className={`group p-2 -mx-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${isMarkedPulang ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-teal-50/50'}`}>
                   <div className="flex-1 leading-tight">
-                    <div><span className="font-semibold mr-2">{idx + 1}.</span><span className="font-medium">{bedOrKamar}</span><span className="text-slate-400 mx-1.5">/</span><span className="font-bold">{formattedName}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.jk || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.age || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span><span className="text-slate-400 mx-1.5">/</span><span>{patient.dx || '-'}</span></div>
-                    <div className="mt-0 pl-0 text-teal-800 font-medium leading-tight">
+                    <div className="flex items-baseline flex-wrap gap-y-0.5">
+                      <span className="font-semibold mr-1.5">{idx + 1}.</span>
+                      <span className="font-medium">{bedOrKamar}</span>
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span className="font-bold">{formattedName}</span>
+                      {isMarkedPulang && (
+                        <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                          Tanda Pulang
+                        </span>
+                      )}
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span>{patient.jk || '-'}</span>
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span>{patient.age || '-'}</span>
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span>{patient.dx || '-'}</span>
+                    </div>
+                    <div className="mt-0.5 pl-0 text-teal-800 font-medium leading-tight">
                       {role === 'DPJP' ? <div><b>DPJP:</b> {doctorName}</div> : <><div><b>DPJP:</b> {mainDpjp || '-'}</div><div><b>{role}:</b> {doctorName}</div></>}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onEditPatient(patient)}
-                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs shrink-0 cursor-pointer print:hidden"
-                    title="Edit data pasien"
-                  >
-                    <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
-                    <span>Edit</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0 print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => onTogglePresence?.(patient)}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                        isMarkedPulang
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                      }`}
+                      title={
+                        isMarkedPulang
+                          ? 'Tanda Pulang. Klik untuk kembalikan ke Masih Ada.'
+                          : 'Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
+                      }
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isMarkedPulang ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      <span className="hidden sm:inline">{isMarkedPulang ? 'Tanda Pulang' : 'Masih Ada'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onEditPatient(patient)}
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs cursor-pointer"
+                      title="Edit data pasien"
+                    >
+                      <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </button>
+                    {onDeletePatient && (
+                      <button
+                        type="button"
+                        onClick={() => onDeletePatient(patient)}
+                        className={`transition-opacity flex items-center gap-1 px-2 py-1 border text-xs font-semibold rounded-lg shadow-2xs cursor-pointer ${
+                          isMarkedPulang
+                            ? 'opacity-100 bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                            : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-white hover:bg-rose-50 border-slate-200 hover:border-rose-300 text-slate-500 hover:text-rose-600'
+                        }`}
+                        title={isMarkedPulang ? 'ACC Residen: Hapus data pasien pulang' : 'Hapus data pasien'}
+                      >
+                        <Trash2 className="w-3 h-3 text-rose-600 shrink-0" />
+                        <span className="hidden sm:inline">Hapus</span>
+                      </button>
+                    )}
+                  </div>
                 </li>;
               })}</ol></div>;
             })}

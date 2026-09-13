@@ -69,6 +69,11 @@
           "type": "string",
           "description": "Waktu terakhir pembaruan",
           "maxLength": 50
+        },
+        "presenceStatus": {
+          "type": "string",
+          "description": "Status tanda sweeping pagi: ada (masih ada di ruangan) atau pulang (tanda sudah pulang/rencana pulang)",
+          "enum": ["ada", "pulang"]
         }
       },
       "required": ["id", "name", "jk", "rm", "room", "dpjp", "date", "division"]
