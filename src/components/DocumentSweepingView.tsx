@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
-import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Trash2 } from 'lucide-react';
+import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Trash2, Edit2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
 interface DocumentSweepingViewProps {
@@ -70,7 +70,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
             <span>Hapus Semua</span>
           </button>
         )}
-        <button onClick={onAddPatient} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white min-h-[36px]"><Plus className="w-4 h-4" />Tambah Pasien</button>
+        <button onClick={onAddPatient} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white min-h-[36px] transition-colors shrink-0 shadow-2xs cursor-pointer"><Plus className="w-4 h-4" />Tambah Pasien</button>
       </div>
     </header>
 
@@ -113,7 +113,15 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       {role === 'DPJP' ? <div><b>DPJP:</b> {doctorName}</div> : <><div><b>DPJP:</b> {mainDpjp || '-'}</div><div><b>{role}:</b> {doctorName}</div></>}
                     </div>
                   </div>
-                  <button onClick={() => onEditPatient(patient)} className="opacity-0 group-hover:opacity-100 px-2 py-1 bg-white border border-slate-200 text-xs text-slate-600 rounded shadow-2xs print:hidden">Edit</button>
+                  <button
+                    type="button"
+                    onClick={() => onEditPatient(patient)}
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs shrink-0 cursor-pointer print:hidden"
+                    title="Edit data pasien"
+                  >
+                    <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
+                    <span>Edit</span>
+                  </button>
                 </li>;
               })}</ol></div>;
             })}
