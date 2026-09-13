@@ -84,7 +84,7 @@ export function generateReportText({mode,date,division,koasName,selectedDpjp,pat
   return `${header}\n*Total pasien keseluruhan: ${filtered.length} pasien*\n${formatRoomsReport(filtered,true,allRooms)}${closing}`;
 }
 
-export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[]}):string{
+export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=true}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;}):string{
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter. Perkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -96,8 +96,21 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
   const roomOrder=allRooms&&allRooms.length>0?allRooms:MASTER_ROOMS;
   const customRooms=[...new Set(filtered.map(p=>normalizeRoomName(p.room)))].filter(r=>!roomOrder.some(mr=>mr.toLowerCase()===r.toLowerCase()));
   const completeRooms=[...roomOrder,...customRooms];
-  const body=completeRooms.map(r=>{const roomPatients=filtered.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(roomPatients.length===0)return `*${r.toUpperCase()} (0)*\n__________________\n`;const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleLinesForPatient(p)}`;}).join('\n');return `*${r.toUpperCase()} (${roomPatients.length})*\n${lines}\n`;}).join('\n');
-  return `${header}${targetHeader}\n${body.trim()}${closing}`;
+  const body=completeRooms.map(r=>{
+    const roomPatients=filtered.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());
+    if(roomPatients.length===0){
+      if(!includeEmptyRooms)return '';
+      return `*${r.toUpperCase()} (0)*\n__________________\n`;
+    }
+    const lines=roomPatients.map((p,i)=>{
+      const bedOrKamar=formatKamarOrBed(p.room,p.kamar);
+      const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);
+      return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleLinesForPatient(p)}`;
+    }).join('\n');
+    return `*${r.toUpperCase()} (${roomPatients.length})*\n${lines}\n`;
+  }).filter(Boolean).join('\n');
+  const trimmedBody=body.trim()||(includeEmptyRooms?'':'(Tidak ada pasien di ruangan rawat inap)');
+  return `${header}${targetHeader}\n${trimmedBody}${closing}`;
 }
 
 function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:string[]):string{
