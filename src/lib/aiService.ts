@@ -2,7 +2,7 @@ import { auth, db } from './firebase';
 import { doc, runTransaction } from 'firebase/firestore';
 
 const MAX_AI_REQUESTS_PER_DAY = 5;
-const AI_USAGE_TEAM_CODE = '__AI_USAGE__';
+const AI_USAGE_TEAM_CODE = 'ai_usage_registry';
 const ADMIN_EMAIL = 'm.hafidzuddin.s@gmail.com';
 
 export interface ParsedPatientRaw {
