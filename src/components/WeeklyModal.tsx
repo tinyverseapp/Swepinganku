@@ -95,7 +95,7 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
         await seedWeeklyHistory(teamCode, startDate, endDate, currentPatients);
         if (!active) return;
 
-        const unsubscribe = subscribeToWeeklyHistory(teamCode, startDate, (records) => {
+        const unsubscribe = subscribeToWeeklyHistory(teamCode, startDate, endDate, (records) => {
           if (!active) return;
           const result = buildWeeklyData(records, startDate, endDate, division);
           setRows(result.rows); setDates(result.dates); setDetailedPatients(result.detailedPatients); setLoading(false);

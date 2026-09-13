@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Patient } from '../types';
+import { parseDateSafely, formatDateIso } from '../utils/storage';
 
 const COLLECTION = 'sweepinganku';
 const WEEKLY_HISTORY_TYPE = 'weeklyHistory';
@@ -73,17 +74,18 @@ function rmKey(rm?: string | null): string {
 }
 
 function getWeekStart(date: string): string {
-  const d = new Date(`${date}T00:00:00`);
+  const d = parseDateSafely(date);
   if (Number.isNaN(d.getTime())) return date;
   const diff = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - diff);
-  return d.toISOString().slice(0, 10);
+  return formatDateIso(d);
 }
 
 function getWeekEnd(weekStart: string): string {
-  const d = new Date(`${weekStart}T00:00:00`);
+  const d = parseDateSafely(weekStart);
+  if (Number.isNaN(d.getTime())) return weekStart;
   d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
+  return formatDateIso(d);
 }
 
 function weeklyDocId(teamCode: string, weekStart: string, rm: string): string {
@@ -235,13 +237,20 @@ export async function seedWeeklyHistory(teamCode: string, startDate: string, end
  */
 export function subscribeToWeeklyHistory(
   teamCode: string,
-  weekStart: string,
-  callback: (records: WeeklyHistoryRecord[]) => void,
+  startDate: string,
+  endDateOrCallback: string | ((records: WeeklyHistoryRecord[]) => void),
+  callbackOrError?: ((records: WeeklyHistoryRecord[]) => void) | ((error: Error) => void),
   onError?: (error: Error) => void,
 ): Unsubscribe {
-  if (!teamCode || !weekStart) { callback([]); return () => {}; }
+  const rangeStart = startDate;
+  const rangeEnd = typeof endDateOrCallback === 'string' ? endDateOrCallback : getWeekEnd(startDate);
+  const callback = (typeof endDateOrCallback === 'function' ? endDateOrCallback : callbackOrError) as (records: WeeklyHistoryRecord[]) => void;
+  const handleError = typeof endDateOrCallback === 'string' && typeof callbackOrError === 'function'
+    ? (callbackOrError as (error: Error) => void)
+    : onError;
 
-  const weekEnd = getWeekEnd(weekStart);
+  if (!teamCode || !rangeStart) { callback?.([]); return () => {}; }
+
   const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode));
 
   return onSnapshot(q, (snap) => {
@@ -260,8 +269,8 @@ export function subscribeToWeeklyHistory(
         ...patient,
         teamCode,
         date,
-        weekStart,
-        weekEnd,
+        weekStart: rangeStart,
+        weekEnd: rangeEnd,
         firstDate: date,
         lastDate: date,
         days,
@@ -272,19 +281,19 @@ export function subscribeToWeeklyHistory(
     // First load permanent history. These records survive a daily deletion.
     snap.docs.forEach((d) => {
       const data = d.data() as FirestorePatientRecord;
-      if (!isWeeklyHistory(data) || data.weekStart !== weekStart || !data.rm) return;
+      if (!isWeeklyHistory(data) || !data.rm) return;
       const days = Object.fromEntries(
-        Object.entries(data.days || {}).filter(([dt]) => dt >= weekStart && dt <= weekEnd),
+        Object.entries(data.days || {}).filter(([dt]) => dt >= rangeStart && dt <= rangeEnd),
       );
       if (!Object.keys(days).length) return;
-      ensureRecord(data as Patient, data.lastDate || weekStart, days);
+      ensureRecord(data as Patient, data.lastDate || rangeStart, days);
     });
 
     // Then overlay current daily records. This is the realtime source of truth
     // for patients currently visible in the dashboard.
     snap.docs.forEach((d) => {
       const data = d.data() as FirestorePatientRecord;
-      if (isWeeklyHistory(data) || !data.date || data.date < weekStart || data.date > weekEnd || !data.rm) return;
+      if (isWeeklyHistory(data) || !data.date || data.date < rangeStart || data.date > rangeEnd || !data.rm) return;
       const key = rmKey(data.rm);
       const occurrence = { patient: data as Patient, recordedAt: data.updatedAt || new Date().toISOString() };
       const existing = recordsByRm.get(key);
@@ -304,13 +313,13 @@ export function subscribeToWeeklyHistory(
       const latestPatient = entries[entries.length - 1][1].patient;
       record.firstDate = first;
       record.lastDate = latest;
-      Object.assign(record, latestPatient, { teamCode, weekStart, weekEnd, days: record.days, recordType: WEEKLY_HISTORY_TYPE });
+      Object.assign(record, latestPatient, { teamCode, weekStart: rangeStart, weekEnd: rangeEnd, days: record.days, recordType: WEEKLY_HISTORY_TYPE });
     });
 
     callback([...recordsByRm.values()]);
   }, (err) => {
     console.error('[Firestore] subscribeToWeeklyHistory error:', err);
-    onError?.(err);
+    handleError?.(err);
   });
 }
 

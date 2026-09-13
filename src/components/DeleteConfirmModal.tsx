@@ -4,6 +4,7 @@ import { Trash2, AlertTriangle, X, LogOut, ShieldAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { parseDateSafely, formatDateIso } from '../utils/storage';
 
 interface DeleteConfirmModalProps {
   patient: Patient | null;
@@ -20,11 +21,11 @@ function safeId(value: string): string {
 }
 
 function getWeekStart(date: string): string {
-  const d = new Date(`${date}T00:00:00`);
+  const d = parseDateSafely(date);
   if (Number.isNaN(d.getTime())) return date;
   const diff = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - diff);
-  return d.toISOString().slice(0, 10);
+  return formatDateIso(d);
 }
 
 function rmKey(rm: string): string {
