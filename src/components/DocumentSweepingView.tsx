@@ -2,17 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
-import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Trash2, Edit2 } from 'lucide-react';
+import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
 interface DocumentSweepingViewProps {
   patients: Patient[]; date: string; division: string; koasName: string; dpjps: string[]; allRooms: string[];
   onDateChange?: (newDate: string) => void; onBackToDashboard: () => void; onAddPatient: () => void;
   onEditPatient: (patient: Patient) => void; activeTeam?: DivisionTeam; onOpenTeamModal?: () => void;
-  onHandoverPatients?: () => void; onOpenAiImport?: () => void; onDeleteAllPatients?: () => void;
+  onHandoverPatients?: () => void; onOpenAiImport?: () => void;
 }
 
-export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport, onDeleteAllPatients }: DocumentSweepingViewProps) {
+export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [includeEmptyRooms, setIncludeEmptyRooms] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -57,19 +57,18 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
       <div className="flex items-center gap-2"><button onClick={onBackToDashboard} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 rounded-lg"><ArrowLeft className="w-4 h-4" />Kartu</button><div className="h-4 w-px bg-slate-200" /><div><div className="flex items-center gap-1.5"><span className="font-extrabold text-sm sm:text-base text-slate-900">Sweeping {division}</span><span className="text-[10px] bg-teal-50 text-teal-800 font-semibold px-2 py-0.5 rounded-full border border-teal-200">Dokumen</span></div><p className="text-[10px] text-slate-500">{dayName}, {fullDateStr} · {currentTabPatients.length} Pasien</p></div></div>
       <div className="flex items-center gap-1.5 overflow-x-auto">
         <button onClick={handleCopyWA} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white min-h-[36px]">{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{copied ? 'Tersalin!' : 'Salin WA'}</button>
-        {onHandoverPatients && <button onClick={onHandoverPatients} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-300 min-h-[36px]"><GitPullRequest className="w-3.5 h-3.5" />Operan</button>}
-        <button onClick={() => setIncludeEmptyRooms(!includeEmptyRooms)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-50/80 text-teal-800 border border-teal-200 min-h-[36px]"><SlidersHorizontal className="w-3.5 h-3.5" />R. Kosong (0): {includeEmptyRooms ? 'On' : 'Off'}</button>
-        {onDeleteAllPatients && patients.length > 0 && (
+        {onHandoverPatients && (
           <button
             type="button"
-            onClick={onDeleteAllPatients}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 min-h-[36px] transition-colors cursor-pointer"
-            title="Hapus semua pasien pada hari ini"
+            onClick={onHandoverPatients}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100/80 text-amber-900 border border-amber-300 min-h-[36px] transition-colors cursor-pointer shrink-0 shadow-2xs"
+            title="Operan pasien dari kemarin"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Hapus Semua</span>
+            <GitPullRequest className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>Operan Pasien</span>
           </button>
         )}
+        <button onClick={() => setIncludeEmptyRooms(!includeEmptyRooms)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-50/80 text-teal-800 border border-teal-200 min-h-[36px]"><SlidersHorizontal className="w-3.5 h-3.5" />R. Kosong (0): {includeEmptyRooms ? 'On' : 'Off'}</button>
         <button onClick={onAddPatient} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white min-h-[36px] transition-colors shrink-0 shadow-2xs cursor-pointer"><Plus className="w-4 h-4" />Tambah Pasien</button>
       </div>
     </header>
