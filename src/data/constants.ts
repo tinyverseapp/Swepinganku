@@ -26,6 +26,101 @@ export const PEDIATRIC_CONSULTANTS: string[] = [
   'dr. Dhini Karunia BA, Sp.A'
 ];
 
+/**
+ * Semua dokter yang dikenal di seluruh divisi + dokter anak, digabung jadi satu pool
+ * untuk keperluan fuzzy matching nama dokter dari hasil AI.
+ */
+export function getAllKnownDoctors(extraDpjps: string[] = []): string[] {
+  const fromDivisions = Object.values(DIVISION_CONSULTANTS).flat();
+  return [...new Set([...fromDivisions, ...PEDIATRIC_CONSULTANTS, ...extraDpjps])].filter(Boolean);
+}
+
+/**
+ * Normalisasi nama dokter: lowercase, hapus spasi ganda, hapus tanda baca
+ * non-alfanumerik yang sering berbeda penulisannya (titik, koma, tanda hubung).
+ */
+function normalizeDoctorName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[.,\-()]/g, ' ')   // ganti tanda baca umum jadi spasi
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Ekstrak token kata penting dari nama dokter.
+ * Abaikan gelar prefiks (dr, drg, prof) dan sufiks spesialisasi pendek (sp, subsp, m, ked, klin, k, fics, mars, mh, kes, msc, re, dst).
+ * Yang tersisa adalah token nama asli yang bermakna untuk perbandingan.
+ */
+function extractNameTokens(name: string): string[] {
+  const STOPWORDS = new Set([
+    'dr', 'drg', 'prof', 'sp', 'subsp', 'm', 'ked', 'klin', 'k', 'fics',
+    'mars', 'mh', 'kes', 'msc', 're', 'a', 'b', 'ba', 'bs', 'bt', 'btkv',
+    'ot', 'u', 'bp', 'onk', 'da', 've', 'et', 'ia', 'it', 'tkps', 'etia',
+    'spbp', 'subspda', 'subsponk', 'subspve',
+  ]);
+  return normalizeDoctorName(name)
+    .split(' ')
+    .filter((t) => t.length > 1 && !STOPWORDS.has(t));
+}
+
+/**
+ * Fuzzy match: cari nama dokter paling cocok dari daftar kandidat.
+ * Urutan prioritas:
+ *   1. Exact match (setelah normalisasi)
+ *   2. Input adalah substring dari kandidat (nama pendek cocok ke nama lengkap)
+ *   3. Token overlap — semua token input ditemukan di kandidat
+ *   4. Token overlap sebagian — minimal 2 token input cocok & score tertinggi
+ * Kembalikan nama lengkap dari database jika cocok, atau string kosong jika tidak ada.
+ */
+export function fuzzyMatchDoctor(input: string, candidates: string[]): string {
+  if (!input.trim() || !candidates.length) return '';
+
+  const normInput = normalizeDoctorName(input);
+
+  // 1. Exact match
+  const exact = candidates.find((c) => normalizeDoctorName(c) === normInput);
+  if (exact) return exact;
+
+  // 2. Substring: input (setelah normalisasi) terkandung dalam kandidat
+  //    Misal: "dr. Santi, Sp. BA" → cocok ke "dr. Santi Rini., Sp.BA., Subsp.DA(K)"
+  //    Syarat: panjang input minimal 6 karakter agar tidak false-positive
+  if (normInput.length >= 6) {
+    const substringMatch = candidates.find((c) => normalizeDoctorName(c).includes(normInput));
+    if (substringMatch) return substringMatch;
+  }
+
+  // 3. Token overlap penuh: semua token input ada di token kandidat
+  const inputTokens = extractNameTokens(input);
+  if (inputTokens.length >= 1) {
+    const fullTokenMatch = candidates.find((c) => {
+      const cTokens = new Set(extractNameTokens(c));
+      return inputTokens.every((t) => cTokens.has(t));
+    });
+    if (fullTokenMatch) return fullTokenMatch;
+  }
+
+  // 4. Token overlap sebagian: hitung skor, ambil yang tertinggi
+  //    Minimal 2 token harus cocok agar tidak false-positive
+  if (inputTokens.length >= 2) {
+    let bestScore = 0;
+    let bestCandidate = '';
+    for (const c of candidates) {
+      const cTokens = new Set(extractNameTokens(c));
+      const matched = inputTokens.filter((t) => cTokens.has(t)).length;
+      // Skor = proporsi token input yang cocok ke kandidat
+      const score = matched / inputTokens.length;
+      if (matched >= 2 && score > bestScore) {
+        bestScore = score;
+        bestCandidate = c;
+      }
+    }
+    if (bestCandidate) return bestCandidate;
+  }
+
+  return '';
+}
+
 /** Master database ruangan dengan urutan tetap resmi. */
 export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Mawar','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia','Tulip'];
 export const DEFAULT_ROOMS = MASTER_ROOMS;

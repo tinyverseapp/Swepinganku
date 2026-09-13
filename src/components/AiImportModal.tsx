@@ -3,7 +3,7 @@ import { X, ClipboardPaste, Trash2, CheckCircle2, AlertCircle, Plus, FileText, R
 import { AiSparkleIcon } from './AiSparkleIcon';
 import { Patient } from '../types';
 import { parsePatientsWithAi, ParsedPatientRaw } from '../lib/aiService';
-import { MASTER_ROOMS, PEDIATRIC_CONSULTANTS, normalizeRoomName } from '../data/constants';
+import { MASTER_ROOMS, PEDIATRIC_CONSULTANTS, normalizeRoomName, getAllKnownDoctors, fuzzyMatchDoctor } from '../data/constants';
 import { formatIndonesianDate } from '../utils/storage';
 
 interface AiImportModalProps {
@@ -23,6 +23,8 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
   const [error, setError] = useState<string | null>(null);
   const [parsedList, setParsedList] = useState<ParsedPatientRaw[]>([]);
   const [hasParsed, setHasParsed] = useState(false);
+  // Menyimpan info koreksi nama otomatis: key = "index:field", value = nama asli dari AI
+  const [correctedNames, setCorrectedNames] = useState<Record<string, string>>({});
   if (!isOpen) return null;
 
   const sampleNote = `Operan Pasien:\n\n1. An. Budi (L / 8 th) RM: 01-88-29\nRuang Mawar Bed 3\nDPJP: dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A\nRABER: dr. Santi Rini, Sp.BA\nDx: Hernia Inguinalis Lateralis Dextra\n\n2. An. Siti (P / 5 th) RM: 02-33-41\nRuang Teratai Kamar 2A\nDPJP: dr. Anrih Roi Manthurio, Sp.A\nKonsul Bedah Anak ke dr. Santi Rini, Sp.BA\nDx: Appendisitis Akut`;
@@ -33,7 +35,38 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
     try {
       const results = await parsePatientsWithAi(inputText, division, knownRooms, knownDpjps, PEDIATRIC_CONSULTANTS);
       if (!results?.length) { setError('AI tidak mendeteksi data pasien pada teks yang diberikan.'); setParsedList([]); }
-      else { setParsedList(results); setHasParsed(true); }
+      else {
+        // Auto-koreksi nama dokter: cocokkan nama pendek dari AI ke nama lengkap di database
+        const allKnown = getAllKnownDoctors(knownDpjps);
+        const corrections: Record<string, string> = {};
+        const corrected = results.map((p, idx) => {
+          let { dpjp, supervisingDpjp } = p;
+
+          // Koreksi field dpjp (Dokter Peran: DPJP/RABER/KONSUL)
+          if (dpjp) {
+            const matched = fuzzyMatchDoctor(dpjp, allKnown);
+            if (matched && matched !== dpjp) {
+              corrections[`${idx}:dpjp`] = dpjp; // simpan nama asli AI
+              dpjp = matched;
+            }
+          }
+
+          // Koreksi field supervisingDpjp (DPJP Utama untuk RABER/KONSUL)
+          if (supervisingDpjp) {
+            const matched = fuzzyMatchDoctor(supervisingDpjp, allKnown);
+            if (matched && matched !== supervisingDpjp) {
+              corrections[`${idx}:supervisingDpjp`] = supervisingDpjp;
+              supervisingDpjp = matched;
+            }
+          }
+
+          return { ...p, dpjp, supervisingDpjp };
+        });
+
+        setCorrectedNames(corrections);
+        setParsedList(corrected);
+        setHasParsed(true);
+      }
     } catch (err: any) { console.error('AI Parse error:', err); setError(err?.message || 'Gagal memproses catatan dengan AI.'); }
     finally { setIsLoading(false); }
   };
@@ -41,7 +74,7 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
     try { const text = await navigator.clipboard.readText(); if (text) { setInputText(text); setError(null); } }
     catch { setError('Izin akses clipboard ditolak oleh browser. Silakan tempel (Ctrl+V) langsung ke kolom teks.'); }
   };
-  const handleClear = () => { setInputText(''); setParsedList([]); setHasParsed(false); setError(null); };
+  const handleClear = () => { setInputText(''); setParsedList([]); setHasParsed(false); setError(null); setCorrectedNames({}); };
   const updateItem = (index: number, field: keyof ParsedPatientRaw, value: string) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   const updateRole = (index: number, role: DoctorRole) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, doctorRole: role, supervisingDpjp: role === 'DPJP' ? undefined : p.supervisingDpjp } : p));
   const addItem = () => setParsedList((prev) => [...prev, { name: '', age: '', jk: '', rm: '', room: '', kamar: '', dpjp: '', doctorRole: undefined, supervisingDpjp: undefined, dx: '' }]);
@@ -56,13 +89,29 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
 
     const timestamp = new Date().toISOString();
     const divisionDoctors = knownDpjps.map((d) => d.trim());
-    const norm = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
-    const findDivisionDoctor = (value?: string) => divisionDoctors.find((d) => norm(d) === norm(value || '')) || '';
+    // Pool lengkap: dokter dari divisi aktif + semua dokter di database constants
+    const allKnownForMatch = getAllKnownDoctors(divisionDoctors);
+    // Fuzzy match ke divisi aktif dulu (prioritas), fallback ke pool lengkap
+    const findDivisionDoctor = (value?: string): string => {
+      if (!value?.trim()) return '';
+      // Coba exact match ke divisi aktif
+      const normVal = value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const exact = divisionDoctors.find((d) => d.toLowerCase().replace(/\s+/g, ' ') === normVal);
+      if (exact) return exact;
+      // Fuzzy match ke divisi aktif
+      const fuzzyDiv = fuzzyMatchDoctor(value, divisionDoctors);
+      if (fuzzyDiv) return fuzzyDiv;
+      // Fuzzy match ke seluruh pool database
+      return fuzzyMatchDoctor(value, allKnownForMatch);
+    };
     const newPatients: Patient[] = valid.map((p, idx) => {
       let roleDoctor = p.dpjp.trim();
       let mainDpjp = p.supervisingDpjp?.trim() || '';
       const roleDoctorInDivision = findDivisionDoctor(roleDoctor);
       const mainDpjpInDivision = findDivisionDoctor(mainDpjp);
+      // Gunakan nama lengkap dari database jika ditemukan
+      if (roleDoctorInDivision) roleDoctor = roleDoctorInDivision;
+      if (mainDpjpInDivision) mainDpjp = mainDpjpInDivision;
       if (!roleDoctorInDivision && mainDpjpInDivision && (p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL')) {
         const externalMain = roleDoctor;
         roleDoctor = mainDpjpInDivision;
@@ -97,8 +146,27 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800"><b>Periksa struktur dokter:</b> untuk RABER/KONSUL, <b>Dokter Peran</b> = dokter bedah yang menjadi RABER/KONSUL; <b>DPJP Utama</b> = dokter yang bertanggung jawab utama (misalnya dokter anak).</div>
           {parsedList.map((p, index) => { const role = p.doctorRole; const needs = role === 'RABER' || role === 'KONSUL'; return <div key={index} className="rounded-2xl border border-slate-200 p-4 space-y-3">
             <div className="flex justify-between"><b className="text-sm">Pasien {index + 1}</b><button type="button" onClick={() => setParsedList((prev) => prev.filter((_, i) => i !== index))} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{(['name','age','jk','rm','room','kamar','dpjp','dx'] as (keyof ParsedPatientRaw)[]).map((field) => <label key={field} className="text-xs font-semibold text-slate-600">{field === 'dpjp' ? 'DOKTER PERAN' : field.toUpperCase()}<input value={String(p[field] || '')} onChange={(e) => updateItem(index, field, e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>)}</div>
-            <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3 space-y-2"><div className="text-[11px] font-extrabold text-teal-900">PERAN DOKTER</div><div className="grid grid-cols-3 gap-1.5">{ROLE_OPTIONS.map((o) => <button key={o.value} type="button" onClick={() => updateRole(index, o.value)} className={`rounded-lg px-2 py-2 text-xs font-bold border ${role === o.value ? 'bg-white border-teal-400 text-teal-700' : 'bg-white/50 border-slate-200 text-slate-500'}`}>{o.label}</button>)}</div>{!role && <p className="text-[10px] font-bold text-red-700">Peran belum dapat ditentukan dari teks. Pilih peran sebelum impor.</p>}{needs && <label className="block text-xs font-bold text-amber-900">DPJP UTAMA *<input value={p.supervisingDpjp || ''} onChange={(e) => updateItem(index, 'supervisingDpjp', e.target.value)} list={`ai-supervising-${index}`} placeholder="Contoh: dr. Ahmad Wisnu Wardhana, Sp.A" className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm" /><datalist id={`ai-supervising-${index}`}>{[...new Set([...PEDIATRIC_CONSULTANTS, ...knownDpjps])].map((d) => <option key={d} value={d} />)}</datalist></label>}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{(['name','age','jk','rm','room','kamar','dpjp','dx'] as (keyof ParsedPatientRaw)[]).map((field) => {
+              const corrKey = `${index}:${field}`;
+              const originalAiName = correctedNames[corrKey];
+              return <label key={field} className="text-xs font-semibold text-slate-600">
+                {field === 'dpjp' ? 'DOKTER PERAN' : field.toUpperCase()}
+                <input value={String(p[field] || '')} onChange={(e) => updateItem(index, field, e.target.value)} className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${originalAiName ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300'}`} />
+                {originalAiName && (
+                  <span className="mt-1 flex items-center gap-1 text-[10px] text-emerald-700 font-bold">
+                    <span>✓ Dikoreksi otomatis dari:</span>
+                    <span className="font-normal italic">{originalAiName}</span>
+                  </span>
+                )}
+              </label>;
+            })}</div>
+            <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3 space-y-2"><div className="text-[11px] font-extrabold text-teal-900">PERAN DOKTER</div><div className="grid grid-cols-3 gap-1.5">{ROLE_OPTIONS.map((o) => <button key={o.value} type="button" onClick={() => updateRole(index, o.value)} className={`rounded-lg px-2 py-2 text-xs font-bold border ${role === o.value ? 'bg-white border-teal-400 text-teal-700' : 'bg-white/50 border-slate-200 text-slate-500'}`}>{o.label}</button>)}</div>{!role && <p className="text-[10px] font-bold text-red-700">Peran belum dapat ditentukan dari teks. Pilih peran sebelum impor.</p>}{needs && <label className="block text-xs font-bold text-amber-900">DPJP UTAMA *
+              {correctedNames[`${index}:supervisingDpjp`] && (
+                <span className="ml-2 text-[10px] text-emerald-700 font-bold normal-case">
+                  ✓ Dikoreksi dari: <span className="font-normal italic">{correctedNames[`${index}:supervisingDpjp`]}</span>
+                </span>
+              )}
+              <input value={p.supervisingDpjp || ''} onChange={(e) => updateItem(index, 'supervisingDpjp', e.target.value)} list={`ai-supervising-${index}`} placeholder="Contoh: dr. Ahmad Wisnu Wardhana, Sp.A" className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white ${correctedNames[`${index}:supervisingDpjp`] ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300'}`} /><datalist id={`ai-supervising-${index}`}>{[...new Set([...PEDIATRIC_CONSULTANTS, ...knownDpjps])].map((d) => <option key={d} value={d} />)}</datalist></label>}</div>
           </div>; })}
           <button type="button" onClick={handleConfirmImport} className="w-full min-h-11 rounded-xl bg-emerald-600 text-white font-bold text-sm"><CheckCircle2 className="w-4 h-4 inline mr-2" />Impor {parsedList.length} Pasien ke Database</button>
         </div>}
