@@ -32,7 +32,6 @@ import { TeamSwitchModal } from './components/TeamSwitchModal';
 import { NextjsRepoModal } from './components/NextjsRepoModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AiImportModal } from './components/AiImportModal';
-import { TeamMembersPanel } from './components/TeamMembersPanel';
 import { Footer } from './components/Footer';
 import { AiSparkleIcon } from './components/AiSparkleIcon';
 import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
@@ -248,7 +247,6 @@ export default function App() {
 
   return <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col selection:bg-teal-100 selection:text-teal-900">
     <Topbar koasName={koasName} onUpdateKoasName={handleUpdateKoasName} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} pageMode={pageMode} onPageModeChange={setPageMode} onOpenNextjsModal={() => setIsNextjsModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onOpenSettings={() => setIsSettingsModalOpen(true)} />
-    <TeamMembersPanel />
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
       {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleHandoverYesterday} onOpenAiImport={() => setIsAiImportModalOpen(true)} onDeleteAllPatients={() => setDeleteAllDayTarget({ date, count: patients.length })} /> : <>
         <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleHandoverYesterday} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
