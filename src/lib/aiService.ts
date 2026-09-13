@@ -82,16 +82,33 @@ export async function parsePatientsWithAi(
   knownDpjps: string[] = [],
   knownPediatricDpjps: string[] = []
 ): Promise<ParsedPatientRaw[]> {
+  // ── Tahap 1: Validasi sesi & kuota (pisah dari fetch agar error-nya jelas) ──
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sesi login tidak ditemukan. Silakan login kembali sebelum menggunakan AI.');
+
+  try {
+    await reserveDailyAiQuota();
+  } catch (err: any) {
+    if (err?.code === 'AI_DAILY_LIMIT') throw err;
+    if (err?.code === 'permission-denied') {
+      throw new Error('Kuota AI tidak dapat dicatat karena izin Firebase belum tersinkron. Silakan coba lagi setelah konfigurasi Firebase diperbarui.');
+    }
+    throw err;
+  }
+
+  // ── Tahap 2: Ambil token — paksa refresh agar tidak pakai token cache yang expired ──
+  let idToken: string;
+  try {
+    // forceRefresh = true → selalu minta token baru ke Firebase, hindari error
+    // "Sesi Firebase tidak valid atau sudah kedaluwarsa" akibat token 1 jam expired
+    idToken = await user.getIdToken(true);
+  } catch (err: any) {
+    throw new Error('Sesi login telah berakhir. Silakan logout lalu login kembali untuk melanjutkan.');
+  }
+
+  // ── Tahap 3: Kirim request ke server AI ──
   let response: Response;
   try {
-    const user = auth.currentUser;
-    if (!user) throw new Error('Sesi login tidak ditemukan. Silakan login kembali sebelum menggunakan AI.');
-
-    // Quota is reserved atomically in Firestore before the Gemini request.
-    // This makes the limit account-based and consistent across devices for the same Firebase user.
-    await reserveDailyAiQuota();
-
-    const idToken = await user.getIdToken();
     response = await fetch('/api/ai/parse-patients', {
       method: 'POST',
       headers: {
@@ -101,11 +118,6 @@ export async function parsePatientsWithAi(
       body: JSON.stringify({ text, division, knownRooms, knownDpjps, knownPediatricDpjps }),
     });
   } catch (err: any) {
-    if (err?.code === 'AI_DAILY_LIMIT') throw err;
-    if (err?.message?.includes('Sesi login')) throw err;
-    if (err?.code === 'permission-denied') {
-      throw new Error('Kuota AI tidak dapat dicatat karena izin Firebase belum tersinkron. Silakan coba lagi setelah konfigurasi Firebase diperbarui.');
-    }
     throw new Error('Tidak dapat terhubung ke server AI. Periksa koneksi internet Anda atau coba sesaat lagi.');
   }
 
