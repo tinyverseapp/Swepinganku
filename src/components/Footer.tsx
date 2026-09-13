@@ -17,7 +17,7 @@ export function Footer() {
               <span className="text-teal-600">anku</span>
             </div>
             <p className="text-xs text-slate-500 font-normal leading-relaxed mt-0.5">
-              Alat bantu klinis bedah &amp; sweeping koas, bukan pengganti penilaian klinis.
+              Website List &amp; Rekap Pasien Mingguan.
             </p>
           </div>
         </div>

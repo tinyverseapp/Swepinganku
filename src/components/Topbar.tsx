@@ -89,7 +89,7 @@ export function Topbar({ koasName, onUpdateKoasName, pageMode = 'dashboard', onP
               )}
             </div>
             <div className="text-[10px] sm:text-[11px] font-medium text-slate-500 truncate flex items-center gap-1.5">
-              <span>Surgical Sweeping &amp; WA Report</span>
+              <span>Website List &amp; Rekap Pasien Mingguan</span>
               {activeTeam?.division && (
                 <span className={`sm:hidden inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold border ${activeTheme.badge}`}>
                   <span className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: activeTheme.hex }} />
