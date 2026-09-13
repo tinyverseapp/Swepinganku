@@ -75,7 +75,7 @@ export function ControlsBar({
       const deleteButton = document.querySelector('button[title="Hapus semua pasien di hari ini"]') as HTMLElement | null;
 
       if (!header || !deleteButton || window.innerWidth < 768) {
-        setSearchPosition(null);
+        setSearchPosition((previous) => previous === null ? previous : null);
         return;
       }
 
@@ -86,11 +86,18 @@ export function ControlsBar({
       const availableWidth = Math.max(220, deleteRect.left - headerRect.left - gap * 2);
       const width = Math.min(maxWidth, availableWidth);
       const left = Math.max(headerRect.left, deleteRect.left - width - gap);
+      const nextPosition = { top: headerRect.top, left, width };
 
-      setSearchPosition({
-        top: headerRect.top,
-        left,
-        width
+      setSearchPosition((previous) => {
+        if (
+          previous &&
+          Math.abs(previous.top - nextPosition.top) < 0.5 &&
+          Math.abs(previous.left - nextPosition.left) < 0.5 &&
+          Math.abs(previous.width - nextPosition.width) < 0.5
+        ) {
+          return previous;
+        }
+        return nextPosition;
       });
     };
 
@@ -111,7 +118,7 @@ export function ControlsBar({
       window.removeEventListener('scroll', scheduleUpdate);
       observer?.disconnect();
     };
-  }, [division, searchQuery]);
+  }, [division]);
 
   // The old startup code derives the initial division from the rotation roster.
   // Re-apply the user's persisted team immediately after mount.
