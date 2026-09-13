@@ -33,6 +33,7 @@ import { NextjsRepoModal } from './components/NextjsRepoModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AiImportModal } from './components/AiImportModal';
 import { Footer } from './components/Footer';
+import { TeamMembersPanel } from './components/TeamMembersPanel';
 import { AiSparkleIcon } from './components/AiSparkleIcon';
 import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
 
@@ -281,6 +282,7 @@ export default function App() {
       </>}
     </main>
     <Footer />
+    <TeamMembersPanel />
     {toastMessage && <div className="fixed bottom-5 right-5 z-50 animate-in fade-in slide-in-from-bottom-5"><div className="bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /><span>{toastMessage}</span></div></div>}
     <PatientModal isOpen={isPatientModalOpen} initialData={editingPatient} defaultDpjp={consultants[0] || ''} existingDpjps={existingDpjps} division={division} divisionConsultants={consultants} onClose={() => { setIsPatientModalOpen(false); setEditingPatient(null); }} onSave={handleSavePatient} />
     <MovePatientModal patient={movingPatient} currentDate={date} onClose={() => setMovingPatient(null)} onConfirm={(targetDate) => movingPatient && handleMovePatient(movingPatient, targetDate)} />

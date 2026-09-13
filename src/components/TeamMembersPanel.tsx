@@ -104,14 +104,14 @@ export function TeamMembersPanel({ inline = false }: TeamMembersPanelProps = {})
   if (!teamCode) return null;
 
   return (
-    <div ref={panelRef} className={inline ? 'relative' : 'fixed left-3 bottom-3 z-50'}>
+    <div ref={panelRef} className={inline ? 'relative' : 'fixed left-3 sm:left-4 bottom-3 sm:bottom-4 z-40'}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         className={
           inline
             ? 'flex items-center gap-2 min-h-9 max-w-[240px] rounded-full border border-slate-200/90 bg-slate-50/90 hover:bg-slate-100 hover:border-slate-300 px-3.5 py-1.5 transition-all cursor-pointer shadow-2xs'
-            : 'flex items-center gap-2 min-h-9 max-w-[220px] rounded-full border border-slate-200 bg-white/95 backdrop-blur shadow-lg hover:shadow-xl hover:bg-slate-50 px-3 py-2 transition-all cursor-pointer'
+            : 'flex items-center gap-2 min-h-9 max-w-[170px] sm:max-w-[220px] rounded-full border border-slate-200/90 bg-white/95 backdrop-blur shadow-md hover:shadow-lg hover:bg-slate-50 px-3 py-1.5 sm:py-2 transition-all cursor-pointer'
         }
         aria-label="Lihat anggota tim"
         aria-expanded={open}

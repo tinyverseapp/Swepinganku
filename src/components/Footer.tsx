@@ -1,14 +1,13 @@
 import { BrandLogoIcon } from './BrandLogo';
-import { TeamMembersPanel } from './TeamMembersPanel';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="w-full bg-white border-t border-slate-200 mt-auto print:hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left: Web Logo, Name, and Subtitle */}
-        <div className="flex items-center gap-3 min-w-0 max-w-xl">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-14 sm:pb-5">
+        {/* Left: Web Logo, Name, and Subtitle with safe-area padding for the floating team button */}
+        <div className="flex items-center gap-3 min-w-0 max-w-xl sm:pl-48 md:pl-56 lg:pl-60 transition-all">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-50 to-white border border-slate-200/90 p-1.5 flex items-center justify-center shadow-2xs shrink-0">
             <BrandLogoIcon className="w-full h-full" size={26} />
           </div>
@@ -21,11 +20,6 @@ export function Footer() {
               Alat bantu klinis bedah &amp; sweeping koas, bukan pengganti penilaian klinis.
             </p>
           </div>
-        </div>
-
-        {/* Center: Team Widget Integrated cleanly */}
-        <div className="flex items-center justify-start md:justify-center shrink-0">
-          <TeamMembersPanel inline />
         </div>
 
         {/* Right: Creator Attribution & Copyright */}
