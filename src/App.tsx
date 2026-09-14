@@ -36,7 +36,7 @@ import { AiImportModal } from './components/AiImportModal';
 import { Footer } from './components/Footer';
 import { TeamMembersPanel } from './components/TeamMembersPanel';
 import { AiSparkleIcon } from './components/AiSparkleIcon';
-import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
+import { Users, UserPlus, GitPullRequest, CheckCircle2, Stethoscope, Sparkles, Trash2, Search } from 'lucide-react';
 
 const EMPTY_TEAM: DivisionTeam = { teamCode: '', division: '', teamName: '', members: [] };
 function getInitialTeam(): DivisionTeam { return getSavedActiveTeam() || EMPTY_TEAM; }
@@ -338,15 +338,15 @@ export default function App() {
       {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} onTogglePresence={handleTogglePresenceStatus} onDeletePatient={(patient) => setDeletingPatient(patient)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleOpenHandoverModal} onOpenAiImport={() => setIsAiImportModalOpen(true)} /> : <>
         <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleOpenHandoverModal} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
         <WeekDaysBar currentDate={date} division={division} currentPatientCount={patients.length} onSelectDate={handleDateChange} onCopyFromDay={handleCopyFromDay} onDeleteAllDay={(dDate, dName, count) => setDeleteAllDayTarget({ date: dDate, dayName: dName, count })} teamCode={activeTeam.teamCode} />
-        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+        <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
                 <Users className="w-4 h-4 text-teal-600" />
                 <span>Total {totalCount} Pasien</span>
               </span>
-              <span className="text-slate-300">|</span>
-              <div className="inline-flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs">
+              <span className="text-slate-300 shrink-0">|</span>
+              <div className="inline-flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs flex-wrap">
                 <button
                   type="button"
                   onClick={() => setPresenceFilter('all')}
@@ -403,21 +403,44 @@ export default function App() {
                 </button>
               </div>
               {selectedDpjpFilter !== 'all' && <>
-                <span className="text-slate-300">|</span>
-                <span className="text-xs text-teal-700 font-semibold bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">{filteredPatients.length} pasien ({selectedDpjpFilter})</span>
+                <span className="text-slate-300 shrink-0">|</span>
+                <span className="text-xs text-teal-700 font-semibold bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200 shrink-0">{filteredPatients.length} pasien ({selectedDpjpFilter})</span>
               </>}
             </div>
-            {totalCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setDeleteAllDayTarget({ date, count: totalCount })}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
-                title="Hapus semua pasien di hari ini"
-              >
-                <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Hapus Semua ({totalCount})</span>
-              </button>
-            )}
+
+            <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-end shrink-0">
+              <div className="relative flex-1 md:w-60 lg:w-72">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari pasien / RM / diagnosis..."
+                  className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-teal-500 rounded-lg pl-8 pr-7 py-1 text-xs font-medium placeholder:text-slate-400 shadow-2xs focus:outline-none focus:ring-2 focus:ring-teal-500/15 transition-all h-8"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none p-0.5 cursor-pointer"
+                    title="Hapus kata kunci pencarian"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {totalCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteAllDayTarget({ date, count: totalCount })}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0 h-8"
+                  title="Hapus semua pasien di hari ini"
+                >
+                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Hapus Semua</span> ({totalCount})
+                </button>
+              )}
+            </div>
           </div>
           <div className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs"><span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" />Filter Dokter:</span><button type="button" onClick={() => setSelectedDpjpFilter('all')} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer transition-all ${selectedDpjpFilter === 'all' ? 'bg-teal-700 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200/70'}`}>Semua Pasien ({patients.length})</button>{existingDpjps.map((d) => { const count = patients.filter((p) => getDivisionDoctorForPatient(p) === d).length; return <button key={d} type="button" onClick={() => setSelectedDpjpFilter(d)} className={`px-2.5 py-1 rounded-lg font-semibold shrink-0 cursor-pointer transition-all ${selectedDpjpFilter === d ? 'bg-teal-700 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200/70'}`}>{d.split(',')[0]} ({count})</button>; })}</div>
         </div>
