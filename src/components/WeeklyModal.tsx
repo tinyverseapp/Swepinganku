@@ -140,10 +140,12 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
     if (!teamCode || !row.rm) return;
     const key = rmKey(row.rm);
     setSavingClassification(key);
-    setRows((prev) => prev.map((item) => rmKey(item.rm) === key ? { ...item, weeklyStatus: status, admissionDate: status === 'baru' ? admissionDate : '' } : item));
+    const finalAdmission = status === 'baru' ? (admissionDate || row.admissionDate || row.first || '') : '';
+    setRows((prev) => prev.map((item) => rmKey(item.rm) === key ? { ...item, weeklyStatus: status, admissionDate: finalAdmission } : item));
+    setDetailedPatients((prev) => prev.map((item) => rmKey(item.rm) === key ? { ...item, weeklyStatus: status, admissionDate: finalAdmission } : item));
     try {
       const ref = doc(db, 'sweepinganku', weeklyDocId(teamCode, startDate, row.rm));
-      await setDoc(ref, { weeklyStatus: status, admissionDate: status === 'baru' ? admissionDate : '' }, { merge: true });
+      await setDoc(ref, { weeklyStatus: status, admissionDate: finalAdmission }, { merge: true });
       setDownloadSuccess(`Status ${row.name} disimpan sebagai ${status === 'baru' ? 'pasien baru' : status === 'lama' ? 'pasien lama' : 'belum ditentukan'}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal menyimpan status pasien.');
@@ -167,21 +169,41 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
 
   const handleDownloadPatientTableCSV = () => {
     if (!detailedPatients.length) return;
-    exportPatientsCSV(detailedPatients, division, `${startDate}_${endDate}`, `Rekap-Pasien-${(division || 'Bedah').replace(/\s+/g, '-')}-${startDate}_${endDate}`);
+    const rowStatusMap = new Map<string, WeeklyRow>(rows.map((r) => [rmKey(r.rm), r]));
+    const synchronizedPatients = detailedPatients.map((p) => {
+      const r = rmKey(p.rm) ? rowStatusMap.get(rmKey(p.rm)) : null;
+      const finalStatus = (r?.weeklyStatus || p.weeklyStatus || 'baru') as Patient['weeklyStatus'];
+      const finalAdmission = finalStatus === 'baru' ? (r?.admissionDate || p.admissionDate || r?.first || '') : '';
+      return {
+        ...p,
+        weeklyStatus: finalStatus,
+        admissionDate: finalAdmission
+      };
+    });
+    exportPatientsCSV(synchronizedPatients, division, `${startDate}_${endDate}`, `Rekap-Pasien-${(division || 'Bedah').replace(/\s+/g, '-')}-${startDate}_${endDate}`);
     setDownloadSuccess('CSV Pasien berhasil diunduh dari data Firebase terbaru.');
   };
   const handleDownloadMatrixCSV = () => {
     if (!rows.length) return;
-    exportWeeklyCSV(rows, dates, division, startDate, endDate);
+    const synchronizedRows = rows.map((r) => {
+      const finalStatus = (r.weeklyStatus || 'baru') as WeeklyStatus;
+      const finalAdmission = finalStatus === 'baru' ? (r.admissionDate || r.first || '') : '';
+      return {
+        ...r,
+        weeklyStatus: finalStatus,
+        admissionDate: finalAdmission
+      };
+    });
+    exportWeeklyCSV(synchronizedRows, dates, division, startDate, endDate);
     setDownloadSuccess('CSV Matriks berhasil diunduh dari data Firebase terbaru.');
   };
 
   const classificationControl = (row: WeeklyRow) => <div className="flex flex-col gap-1 min-w-[132px]">
-    <select value={row.weeklyStatus || ''} onChange={(e) => { const status = e.target.value as WeeklyStatus; void saveClassification(row, status, status === 'baru' ? (row.admissionDate || '') : ''); }} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[9px] font-bold">
+    <select value={row.weeklyStatus || ''} onChange={(e) => { const status = e.target.value as WeeklyStatus; void saveClassification(row, status, status === 'baru' ? (row.admissionDate || row.first || '') : ''); }} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[9px] font-bold">
       <option value="">Pilih status</option><option value="baru">Baru</option><option value="lama">Lama</option>
     </select>
     <StatusBadge status={row.weeklyStatus} />
-    {row.weeklyStatus === 'baru' && <input type="date" value={row.admissionDate || ''} onChange={(e) => void saveClassification(row, 'baru', e.target.value)} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-emerald-200 bg-white px-1.5 py-1 text-[9px]" title="Tanggal pertama kali pasien diinput" />}
+    {row.weeklyStatus === 'baru' && <input type="date" value={row.admissionDate || row.first || ''} onChange={(e) => void saveClassification(row, 'baru', e.target.value)} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-emerald-200 bg-white px-1.5 py-1 text-[9px]" title="Tanggal pertama kali pasien diinput" />}
   </div>;
 
   return <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">

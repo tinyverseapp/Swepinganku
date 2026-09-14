@@ -8,12 +8,13 @@ interface PatientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onTogglePresence?: (patient: Patient) => void;
+  onToggleWeeklyStatus?: (patient: Patient) => void;
   onQuickShare?: () => void;
   onMove?: () => void;
   isCompact?: boolean;
 }
 
-export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQuickShare, onMove, isCompact = false }: PatientCardProps) {
+export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onToggleWeeklyStatus, onQuickShare, onMove, isCompact = false }: PatientCardProps) {
   const isMale = patient.jk === 'L';
   const isBed = isBedRoom(patient.room);
   const formattedLocation = formatKamarOrBed(patient.room, patient.kamar);
@@ -54,6 +55,51 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onQui
               )}
             </div>
             <div className={`flex flex-wrap items-center gap-1.5 ${isCompact ? 'mt-0.5' : 'mt-1'}`}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleWeeklyStatus?.(patient);
+                }}
+                className={`inline-flex items-center gap-1 font-bold rounded-md transition-all cursor-pointer select-none ${
+                  isCompact ? 'text-[9px] px-1.5 py-0.2' : 'text-[10px] px-2 py-0.5'
+                } ${
+                  patient.weeklyStatus === 'baru'
+                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300'
+                    : patient.weeklyStatus === 'lama'
+                    ? 'bg-sky-100 hover:bg-sky-200 text-sky-800 border border-sky-300'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300'
+                }`}
+                title={
+                  patient.weeklyStatus === 'baru'
+                    ? `Pasien Baru (Masuk: ${patient.admissionDate || patient.date || '-'}). Klik untuk ubah jadi Pasien Lama.`
+                    : patient.weeklyStatus === 'lama'
+                    ? 'Pasien Lama (bawaan minggu sebelumnya). Klik untuk ubah jadi Pasien Baru.'
+                    : 'Status belum diatur. Klik untuk tandai Pasien Baru.'
+                }
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    patient.weeklyStatus === 'baru'
+                      ? 'bg-emerald-500'
+                      : patient.weeklyStatus === 'lama'
+                      ? 'bg-sky-500'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <span>
+                  {patient.weeklyStatus === 'baru'
+                    ? 'BARU'
+                    : patient.weeklyStatus === 'lama'
+                    ? 'LAMA'
+                    : 'STATUS?'}
+                </span>
+                {patient.weeklyStatus === 'baru' && (patient.admissionDate || patient.date) && (
+                  <span className="font-mono text-[8.5px] opacity-80">
+                    ({patient.admissionDate || patient.date})
+                  </span>
+                )}
+              </button>
               <span className={`font-bold rounded-full ${isCompact ? 'text-[9px] px-1.5 py-0.2' : 'text-[10px] px-2 py-0.5'} ${isMale ? 'bg-sky-100 text-sky-800' : 'bg-rose-100 text-rose-800'}`}>{patient.jk} · {patient.age || 'Usia -'}</span>
               <span className={`font-mono font-semibold text-slate-600 bg-slate-100 rounded-md ${isCompact ? 'text-[10px] px-1.5 py-0.2' : 'text-xs px-2 py-0.5'}`}>RM: {patient.rm}</span>
             </div>

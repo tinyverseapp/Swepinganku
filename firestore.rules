@@ -7,7 +7,8 @@ service cloud.firestore {
     }
 
     function isValidSweepingPatient(data) {
-      return data.keys().hasAll(['id', 'name', 'jk', 'rm', 'room', 'dpjp', 'date', 'division'])
+      return (('recordType' in data) && data.recordType == 'weeklyHistory')
+        || (data.keys().hasAll(['id', 'name', 'jk', 'rm', 'room', 'dpjp', 'date', 'division'])
         && data.id is string && data.id.size() > 0 && data.id.size() <= 128
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
         && (data.jk == 'L' || data.jk == 'P' || data.jk == '')
@@ -23,7 +24,9 @@ service cloud.firestore {
         && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50))
         && (!('doctorRole' in data) || data.doctorRole == 'DPJP' || data.doctorRole == 'RABER' || data.doctorRole == 'KONSUL')
         && (!('supervisingDpjp' in data) || (data.supervisingDpjp is string && data.supervisingDpjp.size() <= 200))
-        && (!('presenceStatus' in data) || data.presenceStatus == 'ada' || data.presenceStatus == 'pulang' || data.presenceStatus == 'belum_periksa');
+        && (!('presenceStatus' in data) || data.presenceStatus == 'ada' || data.presenceStatus == 'pulang' || data.presenceStatus == 'belum_periksa')
+        && (!('weeklyStatus' in data) || data.weeklyStatus == 'baru' || data.weeklyStatus == 'lama' || data.weeklyStatus == '')
+        && (!('admissionDate' in data) || (data.admissionDate is string && data.admissionDate.size() <= 50)));
     }
 
     function isValidTeam(data) {

@@ -313,7 +313,11 @@ export function subscribeToWeeklyHistory(
       const latestPatient = entries[entries.length - 1][1].patient;
       record.firstDate = first;
       record.lastDate = latest;
+      const prevWeeklyStatus = record.weeklyStatus;
+      const prevAdmissionDate = record.admissionDate;
       Object.assign(record, latestPatient, { teamCode, weekStart: rangeStart, weekEnd: rangeEnd, days: record.days, recordType: WEEKLY_HISTORY_TYPE });
+      if (prevWeeklyStatus && !record.weeklyStatus) record.weeklyStatus = prevWeeklyStatus;
+      if (prevAdmissionDate && !record.admissionDate) record.admissionDate = prevAdmissionDate;
     });
 
     callback([...recordsByRm.values()]);

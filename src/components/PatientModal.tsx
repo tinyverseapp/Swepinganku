@@ -19,6 +19,7 @@ interface PatientModalProps {
   existingDpjps: string[];
   division?: string;
   divisionConsultants?: string[];
+  activeDate?: string;
   onClose: () => void;
   onSave: (patient: Patient) => void;
 }
@@ -30,6 +31,7 @@ export function PatientModal({
   existingDpjps,
   division,
   divisionConsultants,
+  activeDate,
   onClose,
   onSave
 }: PatientModalProps) {
@@ -46,6 +48,8 @@ export function PatientModal({
   const [rm, setRm] = useState('');
   const [dx, setDx] = useState('');
   const [presenceStatus, setPresenceStatus] = useState<Patient['presenceStatus']>('belum_periksa');
+  const [weeklyStatus, setWeeklyStatus] = useState<Patient['weeklyStatus']>('baru');
+  const [admissionDate, setAdmissionDate] = useState('');
 
   useEffect(() => {
     if (initialData) {
@@ -53,6 +57,8 @@ export function PatientModal({
       setDoctorRole(initialData.doctorRole || 'DPJP');
       setSupervisingDpjp(initialData.supervisingDpjp || '');
       setPresenceStatus(initialData.presenceStatus || 'belum_periksa');
+      setWeeklyStatus(initialData.weeklyStatus || 'baru');
+      setAdmissionDate(initialData.admissionDate || initialData.date || activeDate || '');
       const rawRoom = initialData.room || '';
       const normalized = normalizeRoomName(rawRoom);
       const isMaster = MASTER_ROOMS.some((r) => r.toLowerCase() === rawRoom.toLowerCase());
@@ -89,8 +95,10 @@ export function PatientModal({
       setRm('');
       setDx('');
       setPresenceStatus('belum_periksa');
+      setWeeklyStatus('baru');
+      setAdmissionDate(activeDate || '');
     }
-  }, [initialData, defaultDpjp, isOpen]);
+  }, [initialData, defaultDpjp, isOpen, activeDate]);
 
   if (!isOpen) return null;
 
@@ -138,7 +146,9 @@ export function PatientModal({
       rm: rm.trim(),
       dx: dx.trim(),
       updatedAt: new Date().toISOString(),
-      presenceStatus
+      presenceStatus,
+      weeklyStatus,
+      admissionDate: weeklyStatus === 'baru' ? (admissionDate || activeDate || initialData?.date || '') : ''
     };
     onSave(patient);
   };
@@ -265,6 +275,64 @@ export function PatientModal({
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Diagnosis Klinis, Tindakan Operasi &amp; Catatan Khusus</label>
               <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post Appendectomy Laparoskopi H+1, drain minimal kemerahan, flatus (+), diet bubur halus..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all leading-relaxed" />
+            </div>
+
+            {/* Klasifikasi Status Pasien Mingguan & Tanggal Masuk */}
+            <div className="sm:col-span-2 bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700">Status Pasien (Mingguan)</label>
+                <span className="text-[10.5px] text-slate-500 font-medium">Badge Pasien Baru vs Pasien Lama</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeeklyStatus('baru');
+                    if (!admissionDate) setAdmissionDate(activeDate || initialData?.date || '');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    weeklyStatus === 'baru'
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>Pasien Baru (Minggu Ini)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeeklyStatus('lama')}
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    weeklyStatus === 'lama'
+                      ? 'bg-sky-50 border-sky-400 text-sky-800 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0" />
+                  <span>Pasien Lama (Minggu Lalu)</span>
+                </button>
+              </div>
+
+              {weeklyStatus === 'baru' ? (
+                <div className="mt-2 pt-2 border-t border-slate-200/70">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tanggal Masuk Pasien Baru *
+                  </label>
+                  <input
+                    type="date"
+                    value={admissionDate}
+                    onChange={(e) => setAdmissionDate(e.target.value)}
+                    className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    *Tanggal pertama kali pasien diinput atau mulai dirawat. Keterangan ini akan otomatis muncul pada kolom <b>Tanggal Masuk</b> di rekapan mingguan.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-500 pt-0.5">
+                  *Pasien bawaan dari minggu sebelumnya. Pada rekapan mingguan, kolom tanggal masuk akan ditandai (-).
+                </p>
+              )}
             </div>
 
             <div className="sm:col-span-2 bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-1.5">

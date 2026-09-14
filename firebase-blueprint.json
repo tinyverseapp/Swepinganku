@@ -74,6 +74,16 @@
           "type": "string",
           "description": "Status tanda sweeping pagi: belum_periksa (belum dicek di ruangan), ada (masih ada di ruangan), atau pulang (tanda sudah pulang/rencana pulang)",
           "enum": ["belum_periksa", "ada", "pulang"]
+        },
+        "weeklyStatus": {
+          "type": "string",
+          "description": "Klasifikasi pasien mingguan: baru (pasien baru masuk di minggu ini), lama (pasien dari minggu/periode sebelumnya)",
+          "enum": ["baru", "lama", ""]
+        },
+        "admissionDate": {
+          "type": "string",
+          "description": "Tanggal masuk rawat inap / tanggal pasien pertama kali diinput format YYYY-MM-DD",
+          "maxLength": 50
         }
       },
       "required": ["id", "name", "jk", "rm", "room", "dpjp", "date", "division"]
