@@ -113,7 +113,6 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
         if (!active) return;
         await seedWeeklyHistory(teamCode, startDate, endDate, currentPatients);
         if (!active) return;
-
         const unsubscribe = subscribeToWeeklyHistory(teamCode, startDate, endDate, (records) => {
           if (!active) return;
           const result = buildWeeklyData(records, startDate, endDate, division);
@@ -129,7 +128,6 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
         setError(err instanceof Error ? err.message : 'Gagal memuat rekap dari Firebase.'); setLoading(false);
       }
     };
-
     let cleanup: (() => void) | undefined;
     void run();
     return () => { active = false; cleanup?.(); };
@@ -145,16 +143,11 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
     setRows((prev) => prev.map((item) => rmKey(item.rm) === key ? { ...item, weeklyStatus: status, admissionDate: status === 'baru' ? admissionDate : '' } : item));
     try {
       const ref = doc(db, 'sweepinganku', weeklyDocId(teamCode, startDate, row.rm));
-      await setDoc(ref, {
-        weeklyStatus: status,
-        admissionDate: status === 'baru' ? admissionDate : ''
-      }, { merge: true });
+      await setDoc(ref, { weeklyStatus: status, admissionDate: status === 'baru' ? admissionDate : '' }, { merge: true });
       setDownloadSuccess(`Status ${row.name} disimpan sebagai ${status === 'baru' ? 'pasien baru' : status === 'lama' ? 'pasien lama' : 'belum ditentukan'}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal menyimpan status pasien.');
-    } finally {
-      setSavingClassification(null);
-    }
+    } finally { setSavingClassification(null); }
   };
 
   const handleGenerate = () => {
@@ -166,9 +159,8 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
         const currentPatients = await fetchPatientsForDateRange(teamCode, startDate, endDate);
         await seedWeeklyHistory(teamCode, startDate, endDate, currentPatients);
         setDownloadSuccess('Rekap berhasil disegarkan dari Firebase.');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Gagal menyegarkan rekap.');
-      } finally { setLoading(false); }
+      } catch (err) { setError(err instanceof Error ? err.message : 'Gagal menyegarkan rekap.'); }
+      finally { setLoading(false); }
     };
     void refresh();
   };
@@ -184,6 +176,14 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
     setDownloadSuccess('CSV Matriks berhasil diunduh dari data Firebase terbaru.');
   };
 
+  const classificationControl = (row: WeeklyRow) => <div className="flex flex-col gap-1 min-w-[132px]">
+    <select value={row.weeklyStatus || ''} onChange={(e) => { const status = e.target.value as WeeklyStatus; void saveClassification(row, status, status === 'baru' ? (row.admissionDate || '') : ''); }} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[9px] font-bold">
+      <option value="">Pilih status</option><option value="baru">Baru</option><option value="lama">Lama</option>
+    </select>
+    <StatusBadge status={row.weeklyStatus} />
+    {row.weeklyStatus === 'baru' && <input type="date" value={row.admissionDate || ''} onChange={(e) => void saveClassification(row, 'baru', e.target.value)} disabled={savingClassification === rmKey(row.rm)} className="rounded-md border border-emerald-200 bg-white px-1.5 py-1 text-[9px]" title="Tanggal pertama kali pasien diinput" />}
+  </div>;
+
   return <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
     <div className="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
       <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 shrink-0"><div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><CalendarRange className="w-5 h-5" /></div><div><h2 className="text-base sm:text-lg font-extrabold text-slate-900">Rekapitulasi &amp; Ekspor CSV Pasien</h2><p className="text-[11px] text-slate-500">Divisi {division} · sumber data Firebase · realtime</p></div></div><button type="button" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg min-h-9 min-w-9"><X className="w-5 h-5" /></button></div>
@@ -196,7 +196,7 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
       {downloadSuccess && <div className="mt-2 py-2 px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />{downloadSuccess}</div>}
       {error && <div className="mt-2 py-2 px-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">{error}</div>}
       <div className="mt-3 flex-1 overflow-auto border border-slate-200 rounded-xl bg-white">
-        {loading ? <div className="p-12 text-center text-xs text-slate-500"><RefreshCw className="w-7 h-7 animate-spin mx-auto mb-2" />Memuat dan menyinkronkan rekap dari Firebase...</div> : activeTab === 'table' ? (!detailedPatients.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada data pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-[#70ad47] text-white sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">Diagnosis</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan</th></tr></thead><tbody>{detailedPatients.map((p, i) => { const row = rows.find((r) => rmKey(r.rm) === rmKey(p.rm)); return <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono">{p.rm}</td><td className="p-2.5 font-medium">{p.name}</td><td className="p-2.5"><StatusBadge status={row?.weeklyStatus} /></td><td className="p-2.5 whitespace-nowrap">{row?.weeklyStatus === 'baru' && row.admissionDate ? formatDateIso(parseDateSafely(row.admissionDate)) : '-'}</td><td className="p-2.5">{p.jk || '-'}</td><td className="p-2.5">{p.age || '-'}</td><td className="p-2.5">{p.dx || '-'}</td><td className="p-2.5">{p.dpjp || '-'}</td><td className="p-2.5">{formatRoomDisplay(p.room, p.kamar)}</td></tr>; })}</tbody></table>) : (!rows.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada riwayat pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-slate-100 text-slate-700 sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan Terakhir</th><th className="p-2.5">Diagnosis</th>{dates.map((dt) => <th key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{parseDateSafely(dt).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' })}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={r.rm} className="border-b hover:bg-slate-50"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono font-semibold">{r.rm}</td><td className="p-2.5 font-bold whitespace-nowrap"><div className="flex items-center gap-1.5 flex-wrap"><span>{r.name}</span></div></td><td className="p-2.5"><div className="flex flex-col gap-1"><StatusBadge status={r.weeklyStatus} />{r.weeklyStatus === 'baru' && <input type="date" value={r.admissionDate || ''} onChange={(e) => { const value = e.target.value; void saveClassification(r, 'baru', value); }} disabled={savingClassification === rmKey(r.rm)} className="w-[130px] rounded-md border border-emerald-200 bg-white px-1.5 py-1 text-[9px]" title="Tanggal pertama kali pasien diinput" />}</div></td><td className="p-2.5 whitespace-nowrap">{r.weeklyStatus === 'baru' && r.admissionDate ? formatDateIso(parseDateSafely(r.admissionDate)) : '-'}</td><td className="p-2.5">{r.jk}</td><td className="p-2.5">{r.age}</td><td className="p-2.5 whitespace-nowrap">{r.dpjp}</td><td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td><td className="p-2.5">{r.dx}</td>{dates.map((dt) => <td key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{r.days[dt] || <span className="text-slate-300">-</span>}</td>)}</tr>)}</tbody></table>)}
+        {loading ? <div className="p-12 text-center text-xs text-slate-500"><RefreshCw className="w-7 h-7 animate-spin mx-auto mb-2" />Memuat dan menyinkronkan rekap dari Firebase...</div> : activeTab === 'table' ? (!detailedPatients.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada data pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-[#70ad47] text-white sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">Diagnosis</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan</th></tr></thead><tbody>{detailedPatients.map((p, i) => { const row = rows.find((r) => rmKey(r.rm) === rmKey(p.rm)); return <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono">{p.rm}</td><td className="p-2.5 font-medium">{p.name}</td><td className="p-2.5">{row ? classificationControl(row) : <StatusBadge />}</td><td className="p-2.5 whitespace-nowrap">{row?.weeklyStatus === 'baru' && row.admissionDate ? formatDateIso(parseDateSafely(row.admissionDate)) : '-'}</td><td className="p-2.5">{p.jk || '-'}</td><td className="p-2.5">{p.age || '-'}</td><td className="p-2.5">{p.dx || '-'}</td><td className="p-2.5">{p.dpjp || '-'}</td><td className="p-2.5">{formatRoomDisplay(p.room, p.kamar)}</td></tr>; })}</tbody></table>) : (!rows.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada riwayat pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-slate-100 text-slate-700 sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status / Klasifikasi</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan Terakhir</th><th className="p-2.5">Diagnosis</th>{dates.map((dt) => <th key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{parseDateSafely(dt).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' })}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={r.rm} className="border-b hover:bg-slate-50"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono font-semibold">{r.rm}</td><td className="p-2.5 font-bold whitespace-nowrap">{r.name}</td><td className="p-2.5">{classificationControl(r)}</td><td className="p-2.5 whitespace-nowrap">{r.weeklyStatus === 'baru' && r.admissionDate ? formatDateIso(parseDateSafely(r.admissionDate)) : '-'}</td><td className="p-2.5">{r.jk}</td><td className="p-2.5">{r.age}</td><td className="p-2.5 whitespace-nowrap">{r.dpjp}</td><td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td><td className="p-2.5">{r.dx}</td>{dates.map((dt) => <td key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{r.days[dt] || <span className="text-slate-300">-</span>}</td>)}</tr>)}</tbody></table>)}
       </div>
     </div>
   </div>;
