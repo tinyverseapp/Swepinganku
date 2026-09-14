@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Patient } from '../types';
-import { generateReportText } from '../utils/storage';
+import { generateReportText, ReportFormatStyle } from '../utils/storage';
 import { DEFAULT_ROOMS } from '../data/constants';
-import { X, Copy, Check, Send, MessageSquare } from 'lucide-react';
+import { X, Copy, Check, Send, MessageSquare, AlignLeft, ListCollapse } from 'lucide-react';
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -26,6 +26,7 @@ export function ReportModal({
   onClose
 }: ReportModalProps) {
   const [copied, setCopied] = useState(false);
+  const [reportStyle, setReportStyle] = useState<ReportFormatStyle>('inline');
 
   if (!isOpen) return null;
 
@@ -36,7 +37,8 @@ export function ReportModal({
     koasName,
     selectedDpjp,
     patients,
-    allRooms: DEFAULT_ROOMS
+    allRooms: DEFAULT_ROOMS,
+    style: reportStyle
   });
 
   const handleCopy = async () => {
@@ -79,6 +81,41 @@ export function ReportModal({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Style Selector */}
+        <div className="mt-3 flex items-center justify-between gap-2 p-1.5 bg-slate-100/90 rounded-xl shrink-0">
+          <div className="text-[11px] font-semibold text-slate-600 px-2 flex items-center gap-1">
+            <span>Format Tampilan WA:</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setReportStyle('inline')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                reportStyle === 'inline'
+                  ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+              title="Nama pasien dan DPJP berada dalam satu baris sejajar (nomor urut WA tetap rapi)"
+            >
+              <AlignLeft className="w-3.5 h-3.5" />
+              <span>1 Baris Sejajar (Rapi WA)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportStyle('multiline')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                reportStyle === 'multiline'
+                  ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+              title="DPJP berada di baris baru di bawah nama pasien"
+            >
+              <ListCollapse className="w-3.5 h-3.5" />
+              <span>Baris Terpisah</span>
+            </button>
+          </div>
         </div>
 
         {/* Monospace Code Preview */}

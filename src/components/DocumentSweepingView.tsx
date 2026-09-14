@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Patient } from '../types';
 import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
-import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today } from '../utils/storage';
+import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today, ReportFormatStyle } from '../utils/storage';
 import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2, ChevronDown, ClipboardList, Scissors, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 
@@ -15,6 +15,13 @@ interface DocumentSweepingViewProps {
 
 export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, onTogglePresence, onDeletePatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [reportStyle, setReportStyle] = useState<ReportFormatStyle>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sweepinganku:reportStyle');
+      if (saved === 'inline' || saved === 'multiline') return saved;
+    }
+    return 'inline';
+  });
   const [includeEmptyRooms, setIncludeEmptyRooms] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sweepinganku:includeEmptyRooms');
@@ -89,7 +96,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
     return [...base, ...custom];	
   }, [allRooms, currentTabPatients]);
 
-  const handleCopyWA = async (withEmptyRooms: boolean = includeEmptyRooms) => {
+  const handleCopyWA = async (withEmptyRooms: boolean = includeEmptyRooms, selectedStyle: ReportFormatStyle = reportStyle) => {
     const text = generateDocSweepingReportText({
       mode: activeTab === 'all' ? 'all' : 'dpjp',
       date,
@@ -98,7 +105,8 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
       selectedDpjp: activeTab === 'all' ? undefined : activeTab,
       patients: currentTabPatients,
       allRooms: sortedRooms,
-      includeEmptyRooms: withEmptyRooms
+      includeEmptyRooms: withEmptyRooms,
+      style: selectedStyle
     });
     try {
       await navigator.clipboard.writeText(text);
@@ -124,9 +132,9 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
           <div className="inline-flex rounded-lg shadow-2xs overflow-hidden border border-emerald-700/20 bg-emerald-600 hover:bg-emerald-700 transition-colors">
             <button
               type="button"
-              onClick={() => setIsCopyDropdownOpen((prev) => !prev)}
+              onClick={() => handleCopyWA(includeEmptyRooms, reportStyle)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white min-h-[36px] transition-colors cursor-pointer select-none"
-              title="Pilih format Salin WhatsApp"
+              title="Salin laporan format WhatsApp"
               aria-expanded={isCopyDropdownOpen}
               aria-haspopup="true"
             >
@@ -152,34 +160,50 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
           </div>
 
           {isCopyDropdownOpen && (
-            <div className="absolute left-0 mt-1.5 w-76 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1 flex items-center justify-between">
+            <div className="absolute left-0 mt-1.5 w-76 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-2 flex items-center justify-between">
                 <span>Format Salinan WhatsApp</span>
-                <span className="text-[9px] font-medium text-slate-400">Pilih salah satu</span>
+                <span className="text-[9px] font-medium text-slate-400">Rapi &amp; Teratur</span>
               </div>
-              <button
-                type="button"
-                onClick={() => handleCopyWA(true)}
-                className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-50/80 active:bg-emerald-100/70 transition-colors flex items-start gap-2.5 group cursor-pointer"
-              >
-                <ClipboardList className="w-4.5 h-4.5 text-emerald-600 shrink-0 mt-0.5 group-hover:text-emerald-700 transition-colors" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-800 flex items-center justify-between">
-                    <span>Salin Semua Ruangan</span>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                      Lengkap
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                    Lengkap dengan ruangan nihil (0).
-                  </p>
-                </div>
-              </button>
+
+              {/* Gaya Baris WA */}
+              <div className="mb-2 p-1 bg-slate-100/90 rounded-lg flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportStyle('inline');
+                    try { localStorage.setItem('sweepinganku:reportStyle', 'inline'); } catch {}
+                  }}
+                  className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition-all text-center cursor-pointer ${
+                    reportStyle === 'inline'
+                      ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Nama pasien dan DPJP berada dalam satu baris sejajar (nomor urut WA tetap rapi)"
+                >
+                  1 Baris Sejajar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportStyle('multiline');
+                    try { localStorage.setItem('sweepinganku:reportStyle', 'multiline'); } catch {}
+                  }}
+                  className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition-all text-center cursor-pointer ${
+                    reportStyle === 'multiline'
+                      ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="DPJP berada di bawah nama pasien"
+                >
+                  Baris Terpisah
+                </button>
+              </div>
 
               <button
                 type="button"
-                onClick={() => handleCopyWA(false)}
-                className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-50/80 active:bg-emerald-100/70 transition-colors flex items-start gap-2.5 group cursor-pointer mt-0.5"
+                onClick={() => handleCopyWA(false, reportStyle)}
+                className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-50/80 active:bg-emerald-100/70 transition-colors flex items-start gap-2.5 group cursor-pointer"
               >
                 <Scissors className="w-4.5 h-4.5 text-teal-600 shrink-0 mt-0.5 group-hover:text-teal-700 transition-colors" />
                 <div className="flex-1 min-w-0">
@@ -191,6 +215,25 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
                     Ruangan nihil (0 pasien) diabaikan.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleCopyWA(true, reportStyle)}
+                className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-50/80 active:bg-emerald-100/70 transition-colors flex items-start gap-2.5 group cursor-pointer mt-0.5"
+              >
+                <ClipboardList className="w-4.5 h-4.5 text-emerald-600 shrink-0 mt-0.5 group-hover:text-emerald-700 transition-colors" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-800 flex items-center justify-between">
+                    <span>Salin Semua Ruangan</span>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Lengkap
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                    Lengkap dengan ruangan nihil (0).
                   </p>
                 </div>
               </button>
@@ -292,9 +335,14 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
                       <span className="text-slate-400 mx-1">/</span>
                       <span>{patient.dx || '-'}</span>
-                    </div>
-                    <div className="mt-0.5 pl-0 text-teal-800 font-medium leading-tight">
-                      {role === 'DPJP' ? <div><b>DPJP:</b> {doctorName}</div> : <><div><b>DPJP:</b> {mainDpjp || '-'}</div><div><b>{role}:</b> {doctorName}</div></>}
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span className="text-teal-800 font-semibold">
+                        {role === 'DPJP' ? (
+                          <><b>DPJP:</b> {doctorName}</>
+                        ) : (
+                          <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 print:hidden">

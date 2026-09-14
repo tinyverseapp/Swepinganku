@@ -56,11 +56,27 @@ export const loadCurrentTeam=(division?:string,koasName?:string)=>getActiveTeam(
 export const saveCurrentTeam=setActiveTeam;
 export function handoverYesterdayPatients(todayDate:string,division:string,_carryOverStatusOnly:boolean=true):{addedCount:number;patients:Patient[]}{return handoverPatientsLocal(getActiveTeam(division).teamCode,division,shiftDateByDays(todayDate,-1),todayDate);}
 
-function roleLinesForPatient(p:Patient):string{
-  const doctor=p.dpjp||'-';
-  if(p.doctorRole==='RABER') return `\nDPJP: ${p.supervisingDpjp||'-'}\nRaber: ${doctor}`;
-  if(p.doctorRole==='KONSUL') return `\nDPJP: ${p.supervisingDpjp||'-'}\nKonsul: ${doctor}`;
-  return `\nDPJP: ${doctor}`;
+export type ReportFormatStyle = 'inline' | 'multiline';
+
+export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'inline'): string {
+  const doctor = p.dpjp || '-';
+  const supervising = p.supervisingDpjp || '-';
+  const isRaber = p.doctorRole === 'RABER';
+  const isKonsul = p.doctorRole === 'KONSUL';
+
+  if (style === 'inline') {
+    if (isRaber) return ` / DPJP: ${supervising} / Raber: ${doctor}`;
+    if (isKonsul) return ` / DPJP: ${supervising} / Konsul: ${doctor}`;
+    return ` / DPJP: ${doctor}`;
+  }
+
+  if (isRaber) return `\n   DPJP: ${supervising}\n   Raber: ${doctor}`;
+  if (isKonsul) return `\n   DPJP: ${supervising}\n   Konsul: ${doctor}`;
+  return `\n   DPJP: ${doctor}`;
+}
+
+function roleLinesForPatient(p: Patient): string {
+  return roleTextForPatient(p, 'inline');
 }
 
 function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
@@ -70,7 +86,7 @@ function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
   return `*DPJP: ${fallback||patients[0]?.dpjp||'-'}*`;
 }
 
-export function generateReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[]}):string{
+export function generateReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,style='inline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];style?:ReportFormatStyle;}):string{
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter.\nPerkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}.\nMohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -79,12 +95,12 @@ export function generateReportText({mode,date,division,koasName,selectedDpjp,pat
     const target=selectedDpjp||(patients[0]?.dpjp||'[DPJP]');
     filtered=patients.filter(p=>p.dpjp===target);
     let out=`${header}\n${roleHeaderForPatients(filtered,target)}\n*Total pasien: ${filtered.length} pasien*\n`;
-    out+=formatRoomsReport(filtered,false,allRooms); return out+closing;
+    out+=formatRoomsReport(filtered,false,allRooms,style); return out+closing;
   }
-  return `${header}\n*Total pasien keseluruhan: ${filtered.length} pasien*\n${formatRoomsReport(filtered,true,allRooms)}${closing}`;
+  return `${header}\n*Total pasien keseluruhan: ${filtered.length} pasien*\n${formatRoomsReport(filtered,true,allRooms,style)}${closing}`;
 }
 
-export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=false}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;}):string{
+export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=false,style='inline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;style?:ReportFormatStyle;}):string{
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter. Perkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -105,19 +121,20 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
     const lines=roomPatients.map((p,i)=>{
       const bedOrKamar=formatKamarOrBed(p.room,p.kamar);
       const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);
-      return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleLinesForPatient(p)}`;
-    }).join('\n');
+      const roleText=roleTextForPatient(p,style);
+      return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;
+    }).join(style === 'inline' ? '\n' : '\n\n');
     return `*${r.toUpperCase()} (${roomPatients.length})*\n${lines}\n`;
   }).filter(Boolean).join('\n');
   const trimmedBody=body.trim()||(includeEmptyRooms?'':'(Tidak ada pasien di ruangan rawat inap)');
   return `${header}${targetHeader}\n${trimmedBody}${closing}`;
 }
 
-function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:string[]):string{
+function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:string[],style:ReportFormatStyle='inline'):string{
   const patientRooms=[...new Set(patients.map(p=>normalizeRoomName(p.room)))];const roomOrder=defaultRooms&&defaultRooms.length>0?defaultRooms:MASTER_ROOMS;
   const sortedRooms=[...roomOrder.filter(r=>patientRooms.some(pr=>pr.toLowerCase()===r.toLowerCase())),...patientRooms.filter(pr=>!roomOrder.some(r=>r.toLowerCase()===pr.toLowerCase())).sort()];
   if(sortedRooms.length===0)return '\n(Belum ada pasien yang terdaftar di ruangan rawat inap)';
-  return sortedRooms.map(r=>{const roomPatients=patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleLinesForPatient(p)}`;}).join('\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
+  return sortedRooms.map(r=>{const roomPatients=patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
 }
 
 export function getDatesBetween(startDate:string,endDate:string):string[]{const result:string[]=[];const current=parseDateSafely(startDate);const stop=parseDateSafely(endDate);let count=0;while(current.getTime()<=stop.getTime()&&count<60){result.push(formatDateIso(current));current.setDate(current.getDate()+1);count++;}return result;}
