@@ -17,6 +17,10 @@ export interface Patient {
   division?: string;
   lastDate?: string;
   presenceStatus?: 'belum_periksa' | 'ada' | 'pulang';
+  /** Manual weekly classification; intentionally not inferred from the date. */
+  weeklyStatus?: 'baru' | 'lama' | '';
+  /** Manual admission date shown for patients classified as baru. */
+  admissionDate?: string;
 }
 
 export type ViewMode = 'dpjp' | 'all';
@@ -45,6 +49,8 @@ export interface WeeklyRow {
   lastRoom: string;
   lastKamar: string;
   days: Record<string, string>;
+  weeklyStatus?: 'baru' | 'lama' | '';
+  admissionDate?: string;
 }
 
 export interface NextJsFile {
