@@ -56,9 +56,9 @@ export const loadCurrentTeam=(division?:string,koasName?:string)=>getActiveTeam(
 export const saveCurrentTeam=setActiveTeam;
 export function handoverYesterdayPatients(todayDate:string,division:string,_carryOverStatusOnly:boolean=true):{addedCount:number;patients:Patient[]}{return handoverPatientsLocal(getActiveTeam(division).teamCode,division,shiftDateByDays(todayDate,-1),todayDate);}
 
-export type ReportFormatStyle = 'inline' | 'multiline';
+export type ReportFormatStyle = 'multiline' | 'inline';
 
-export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'inline'): string {
+export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multiline'): string {
   const doctor = p.dpjp || '-';
   const supervising = p.supervisingDpjp || '-';
   const isRaber = p.doctorRole === 'RABER';
@@ -70,13 +70,15 @@ export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'inlin
     return ` / DPJP: ${doctor}`;
   }
 
+  // Multiline with indentation (without sub-bullet) so it aligns with the patient text above
+  // 3-space indentation aligns cleanly under the number prefix (e.g. "1. " or "10. ")
   if (isRaber) return `\n   DPJP: ${supervising}\n   Raber: ${doctor}`;
   if (isKonsul) return `\n   DPJP: ${supervising}\n   Konsul: ${doctor}`;
   return `\n   DPJP: ${doctor}`;
 }
 
 function roleLinesForPatient(p: Patient): string {
-  return roleTextForPatient(p, 'inline');
+  return roleTextForPatient(p, 'multiline');
 }
 
 function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
@@ -86,7 +88,7 @@ function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
   return `*DPJP: ${fallback||patients[0]?.dpjp||'-'}*`;
 }
 
-export function generateReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,style='inline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];style?:ReportFormatStyle;}):string{
+export function generateReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,style='multiline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];style?:ReportFormatStyle;}):string{
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter.\nPerkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}.\nMohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -100,7 +102,7 @@ export function generateReportText({mode,date,division,koasName,selectedDpjp,pat
   return `${header}\n*Total pasien keseluruhan: ${filtered.length} pasien*\n${formatRoomsReport(filtered,true,allRooms,style)}${closing}`;
 }
 
-export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=false,style='inline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;style?:ReportFormatStyle;}):string{
+export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=false,style='multiline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;style?:ReportFormatStyle;}):string{
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter. Perkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -130,7 +132,7 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
   return `${header}${targetHeader}\n${trimmedBody}${closing}`;
 }
 
-function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:string[],style:ReportFormatStyle='inline'):string{
+function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:string[],style:ReportFormatStyle='multiline'):string{
   const patientRooms=[...new Set(patients.map(p=>normalizeRoomName(p.room)))];const roomOrder=defaultRooms&&defaultRooms.length>0?defaultRooms:MASTER_ROOMS;
   const sortedRooms=[...roomOrder.filter(r=>patientRooms.some(pr=>pr.toLowerCase()===r.toLowerCase())),...patientRooms.filter(pr=>!roomOrder.some(r=>r.toLowerCase()===pr.toLowerCase())).sort()];
   if(sortedRooms.length===0)return '\n(Belum ada pasien yang terdaftar di ruangan rawat inap)';

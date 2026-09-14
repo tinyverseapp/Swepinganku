@@ -26,7 +26,7 @@ export function ReportModal({
   onClose
 }: ReportModalProps) {
   const [copied, setCopied] = useState(false);
-  const [reportStyle, setReportStyle] = useState<ReportFormatStyle>('inline');
+  const [reportStyle, setReportStyle] = useState<ReportFormatStyle>('multiline');
 
   if (!isOpen) return null;
 
@@ -91,29 +91,29 @@ export function ReportModal({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setReportStyle('inline')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                reportStyle === 'inline'
-                  ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-              title="Nama pasien dan DPJP berada dalam satu baris sejajar (nomor urut WA tetap rapi)"
-            >
-              <AlignLeft className="w-3.5 h-3.5" />
-              <span>1 Baris Sejajar (Rapi WA)</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setReportStyle('multiline')}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 reportStyle === 'multiline'
                   ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
-              title="DPJP berada di baris baru di bawah nama pasien"
+              title="DPJP & Raber di baris baru dengan indentasi sejajar teks pasien di atasnya (tanpa bullet)"
             >
               <ListCollapse className="w-3.5 h-3.5" />
-              <span>Baris Terpisah</span>
+              <span>Baris Baru Indent (Rapi)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportStyle('inline')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                reportStyle === 'inline'
+                  ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+              title="Nama pasien dan DPJP berada dalam satu baris sejajar"
+            >
+              <AlignLeft className="w-3.5 h-3.5" />
+              <span>1 Baris Sejajar</span>
             </button>
           </div>
         </div>

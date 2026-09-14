@@ -20,7 +20,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
       const saved = localStorage.getItem('sweepinganku:reportStyle');
       if (saved === 'inline' || saved === 'multiline') return saved;
     }
-    return 'inline';
+    return 'multiline';
   });
   const [includeEmptyRooms, setIncludeEmptyRooms] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -171,21 +171,6 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                 <button
                   type="button"
                   onClick={() => {
-                    setReportStyle('inline');
-                    try { localStorage.setItem('sweepinganku:reportStyle', 'inline'); } catch {}
-                  }}
-                  className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition-all text-center cursor-pointer ${
-                    reportStyle === 'inline'
-                      ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Nama pasien dan DPJP berada dalam satu baris sejajar (nomor urut WA tetap rapi)"
-                >
-                  1 Baris Sejajar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
                     setReportStyle('multiline');
                     try { localStorage.setItem('sweepinganku:reportStyle', 'multiline'); } catch {}
                   }}
@@ -194,9 +179,24 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
-                  title="DPJP berada di bawah nama pasien"
+                  title="DPJP & Raber di baris baru dengan indentasi sejajar teks pasien di atasnya (tanpa bullet)"
                 >
-                  Baris Terpisah
+                  Baris Baru Indent (Rapi)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportStyle('inline');
+                    try { localStorage.setItem('sweepinganku:reportStyle', 'inline'); } catch {}
+                  }}
+                  className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition-all text-center cursor-pointer ${
+                    reportStyle === 'inline'
+                      ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Nama pasien dan DPJP berada dalam satu baris sejajar"
+                >
+                  1 Baris Sejajar
                 </button>
               </div>
 
@@ -335,15 +335,31 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
                       <span className="text-slate-400 mx-1">/</span>
                       <span>{patient.dx || '-'}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className="text-teal-800 font-semibold">
-                        {role === 'DPJP' ? (
-                          <><b>DPJP:</b> {doctorName}</>
-                        ) : (
-                          <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
-                        )}
-                      </span>
+                      {reportStyle === 'inline' && (
+                        <>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span className="text-teal-800 font-semibold">
+                            {role === 'DPJP' ? (
+                              <><b>DPJP:</b> {doctorName}</>
+                            ) : (
+                              <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
+                            )}
+                          </span>
+                        </>
+                      )}
                     </div>
+                    {reportStyle === 'multiline' && (
+                      <div className="mt-1 pl-4.5 text-xs text-teal-800 font-medium leading-relaxed">
+                        {role === 'DPJP' ? (
+                          <div><span className="font-bold text-teal-900">DPJP:</span> {doctorName}</div>
+                        ) : (
+                          <>
+                            <div><span className="font-bold text-teal-900">DPJP:</span> {mainDpjp || '-'}</div>
+                            <div><span className="font-bold text-teal-900">{role}:</span> {doctorName}</div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 print:hidden">
                     <button
