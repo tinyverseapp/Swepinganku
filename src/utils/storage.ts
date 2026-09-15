@@ -58,7 +58,7 @@ export function handoverYesterdayPatients(todayDate:string,division:string,_carr
 
 export type ReportFormatStyle = 'multiline' | 'inline';
 
-export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multiline'): string {
+export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multiline', index: number = 0): string {
   const doctor = p.dpjp || '-';
   const supervising = p.supervisingDpjp || '-';
   const isRaber = p.doctorRole === 'RABER';
@@ -70,15 +70,19 @@ export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multi
     return ` / DPJP: ${doctor}`;
   }
 
-  // Multiline with indentation (without sub-bullet) so it aligns with the patient text above
-  // 3-space indentation aligns cleanly under the number prefix (e.g. "1. " or "10. ")
-  if (isRaber) return `\n   DPJP: ${supervising}\n   Raber: ${doctor}`;
-  if (isKonsul) return `\n   DPJP: ${supervising}\n   Konsul: ${doctor}`;
-  return `\n   DPJP: ${doctor}`;
+  // Unicode Braille Pattern Blank (\u2800) is classified as a graphic symbol (category 'So'), NOT whitespace.
+  // WhatsApp trims leading ASCII spaces and Unicode whitespace, but NEVER trims \u2800.
+  // 3 Braille blanks align the text directly under 'Bed' for single digit numbers (e.g. '1. Bed'),
+  // and 4 Braille blanks align directly under 'Bed' for double digit numbers (e.g. '10. Bed').
+  const indent = (index + 1) >= 10 ? '\u2800\u2800\u2800\u2800' : '\u2800\u2800\u2800';
+
+  if (isRaber) return `\n${indent}DPJP: ${supervising}\n${indent}Raber: ${doctor}`;
+  if (isKonsul) return `\n${indent}DPJP: ${supervising}\n${indent}Konsul: ${doctor}`;
+  return `\n${indent}DPJP: ${doctor}`;
 }
 
-function roleLinesForPatient(p: Patient): string {
-  return roleTextForPatient(p, 'multiline');
+function roleLinesForPatient(p: Patient, index: number = 0): string {
+  return roleTextForPatient(p, 'multiline', index);
 }
 
 function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
@@ -123,7 +127,7 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
     const lines=roomPatients.map((p,i)=>{
       const bedOrKamar=formatKamarOrBed(p.room,p.kamar);
       const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);
-      const roleText=roleTextForPatient(p,style);
+      const roleText=roleTextForPatient(p,style,i);
       return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;
     }).join(style === 'inline' ? '\n' : '\n\n');
     return `*${r.toUpperCase()} (${roomPatients.length})*\n${lines}\n`;
@@ -136,7 +140,7 @@ function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:stri
   const patientRooms=[...new Set(patients.map(p=>normalizeRoomName(p.room)))];const roomOrder=defaultRooms&&defaultRooms.length>0?defaultRooms:MASTER_ROOMS;
   const sortedRooms=[...roomOrder.filter(r=>patientRooms.some(pr=>pr.toLowerCase()===r.toLowerCase())),...patientRooms.filter(pr=>!roomOrder.some(r=>r.toLowerCase()===pr.toLowerCase())).sort()];
   if(sortedRooms.length===0)return '\n(Belum ada pasien yang terdaftar di ruangan rawat inap)';
-  return sortedRooms.map(r=>{const roomPatients=patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
+  return sortedRooms.map(r=>{const roomPatients=patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style,i);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
 }
 
 export function getDatesBetween(startDate:string,endDate:string):string[]{const result:string[]=[];const current=parseDateSafely(startDate);const stop=parseDateSafely(endDate);let count=0;while(current.getTime()<=stop.getTime()&&count<60){result.push(formatDateIso(current));current.setDate(current.getDate()+1);count++;}return result;}

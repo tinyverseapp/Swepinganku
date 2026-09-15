@@ -312,54 +312,58 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                     ? 'hover:bg-slate-100/70'
                     : 'bg-emerald-50/25 hover:bg-emerald-50/50'
                 }`}>
-                  <div className="flex-1 leading-tight">
-                    <div className="flex items-baseline flex-wrap gap-y-0.5">
-                      <span className="font-semibold mr-1.5">{idx + 1}.</span>
-                      <span className="font-medium">{bedOrKamar}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className="font-bold">{formattedName}</span>
-                      {isMarkedPulang ? (
-                        <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                          Tanda Pulang
-                        </span>
-                      ) : isBelumPeriksa ? (
-                        <span className="ml-1.5 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-300">
-                          Belum Dicek
-                        </span>
-                      ) : null}
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span>{patient.jk || '-'}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span>{patient.age || '-'}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span>{patient.dx || '-'}</span>
-                      {reportStyle === 'inline' && (
-                        <>
-                          <span className="text-slate-400 mx-1">/</span>
-                          <span className="text-teal-800 font-semibold">
-                            {role === 'DPJP' ? (
-                              <><b>DPJP:</b> {doctorName}</>
-                            ) : (
-                              <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
-                            )}
+                  <div className="flex-1 leading-tight flex items-start gap-1.5">
+                    <span className="font-semibold text-slate-700 shrink-0 select-none min-w-[18px]">
+                      {idx + 1}.
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline flex-wrap gap-y-0.5">
+                        <span className="font-medium">{bedOrKamar}</span>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span className="font-bold">{formattedName}</span>
+                        {isMarkedPulang ? (
+                          <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                            Tanda Pulang
                           </span>
-                        </>
-                      )}
-                    </div>
-                    {reportStyle === 'multiline' && (
-                      <div className="mt-1 pl-4.5 text-xs text-teal-800 font-medium leading-relaxed">
-                        {role === 'DPJP' ? (
-                          <div><span className="font-bold text-teal-900">DPJP:</span> {doctorName}</div>
-                        ) : (
+                        ) : isBelumPeriksa ? (
+                          <span className="ml-1.5 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                            Belum Dicek
+                          </span>
+                        ) : null}
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span>{patient.jk || '-'}</span>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span>{patient.age || '-'}</span>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span>{patient.dx || '-'}</span>
+                        {reportStyle === 'inline' && (
                           <>
-                            <div><span className="font-bold text-teal-900">DPJP:</span> {mainDpjp || '-'}</div>
-                            <div><span className="font-bold text-teal-900">{role}:</span> {doctorName}</div>
+                            <span className="text-slate-400 mx-1">/</span>
+                            <span className="text-teal-800 font-semibold">
+                              {role === 'DPJP' ? (
+                                <><b>DPJP:</b> {doctorName}</>
+                              ) : (
+                                <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
+                              )}
+                            </span>
                           </>
                         )}
                       </div>
-                    )}
+                      {reportStyle === 'multiline' && (
+                        <div className="mt-1 text-xs text-teal-800 font-medium leading-relaxed">
+                          {role === 'DPJP' ? (
+                            <div><span className="font-bold text-teal-900">DPJP:</span> {doctorName}</div>
+                          ) : (
+                            <>
+                              <div><span className="font-bold text-teal-900">DPJP:</span> {mainDpjp || '-'}</div>
+                              <div><span className="font-bold text-teal-900">{role}:</span> {doctorName}</div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 print:hidden">
                     <button
