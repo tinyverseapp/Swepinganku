@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Patient } from '../types';
-import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific } from '../data/constants';
+import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific, sortPatientsByRoom } from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today, ReportFormatStyle } from '../utils/storage';
 import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2, ChevronDown, ClipboardList, Scissors, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
@@ -292,7 +292,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
           <div className="my-6 border-b border-slate-200" />
           <div className="space-y-6">
             {sortedRooms.map(roomName => {
-              const roomPatients = currentTabPatients.filter(p => normalizeRoomName(p.room).toLowerCase() === roomName.toLowerCase());
+              const roomPatients = sortPatientsByRoom(currentTabPatients.filter(p => normalizeRoomName(p.room).toLowerCase() === roomName.toLowerCase()));
               if (!roomPatients.length) return includeEmptyRooms ? <div key={roomName} className="space-y-1.5"><div className="font-bold">*{roomName.toUpperCase()} (0)*</div><div className="text-slate-400 tracking-widest font-mono text-xs">____________________________________________________</div></div> : null;
               return <div key={roomName} className="space-y-2"><div className="font-bold flex items-center justify-between"><span>*{roomName.toUpperCase()} ({roomPatients.length})*</span></div><ol className="space-y-1 list-none pl-0">{roomPatients.map((patient, idx) => {
                 const bedOrKamar = formatKamarOrBed(patient.room, patient.kamar);

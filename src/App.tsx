@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Patient, PageMode, DivisionTeam } from './types';
-import { DIVISIONS, DIVISION_CONSULTANTS, DEFAULT_ROOMS, formatKamarOrBed, formatPatientNameWithHonorific } from './data/constants';
+import { DIVISIONS, DIVISION_CONSULTANTS, DEFAULT_ROOMS, formatKamarOrBed, formatPatientNameWithHonorific, sortPatientsByRoom } from './data/constants';
 import {
   today,
   getKoasName,
@@ -317,16 +317,19 @@ export default function App() {
   };
   const existingDpjps = divisionDoctorNames;
 
-  const filteredPatients = useMemo(() => patients.filter((p) => {
-    if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;
-    const status = p.presenceStatus || 'belum_periksa';
-    if (presenceFilter === 'belum_periksa' && status !== 'belum_periksa') return false;
-    if (presenceFilter === 'ada' && status !== 'ada') return false;
-    if (presenceFilter === 'pulang' && status !== 'pulang') return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.rm.toLowerCase().includes(q) || p.dx.toLowerCase().includes(q) || p.dpjp.toLowerCase().includes(q) || p.supervisingDpjp?.toLowerCase().includes(q) || p.room.toLowerCase().includes(q) || p.kamar.toLowerCase().includes(q);
-  }), [patients, selectedDpjpFilter, presenceFilter, searchQuery]);
+  const filteredPatients = useMemo(() => {
+    const list = patients.filter((p) => {
+      if (selectedDpjpFilter !== 'all' && getDivisionDoctorForPatient(p) !== selectedDpjpFilter) return false;
+      const status = p.presenceStatus || 'belum_periksa';
+      if (presenceFilter === 'belum_periksa' && status !== 'belum_periksa') return false;
+      if (presenceFilter === 'ada' && status !== 'ada') return false;
+      if (presenceFilter === 'pulang' && status !== 'pulang') return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return p.name.toLowerCase().includes(q) || p.rm.toLowerCase().includes(q) || p.dx.toLowerCase().includes(q) || p.dpjp.toLowerCase().includes(q) || p.supervisingDpjp?.toLowerCase().includes(q) || p.room.toLowerCase().includes(q) || p.kamar.toLowerCase().includes(q);
+    });
+    return sortPatientsByRoom(list);
+  }, [patients, selectedDpjpFilter, presenceFilter, searchQuery]);
   const totalCount = patients.length;
   const belumCount = useMemo(() => patients.filter((p) => !p.presenceStatus || p.presenceStatus === 'belum_periksa').length, [patients]);
   const adaCount = useMemo(() => patients.filter((p) => p.presenceStatus === 'ada').length, [patients]);

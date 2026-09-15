@@ -9,7 +9,8 @@ import {
   normalizeRoomName,
   formatKamarOrBed,
   formatPatientNameWithHonorific,
-  formatRoomDisplay
+  formatRoomDisplay,
+  sortPatientsByRoom
 } from '../data/constants';
 
 const KEY_PREFIX = 'sweepinganku';
@@ -119,7 +120,7 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
   const customRooms=[...new Set(filtered.map(p=>normalizeRoomName(p.room)))].filter(r=>!roomOrder.some(mr=>mr.toLowerCase()===r.toLowerCase()));
   const completeRooms=[...roomOrder,...customRooms];
   const body=completeRooms.map(r=>{
-    const roomPatients=filtered.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());
+    const roomPatients=sortPatientsByRoom(filtered.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase()));
     if(roomPatients.length===0){
       if(!includeEmptyRooms)return '';
       return `*${r.toUpperCase()} (0)*\n__________________\n`;
@@ -140,7 +141,7 @@ function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:stri
   const patientRooms=[...new Set(patients.map(p=>normalizeRoomName(p.room)))];const roomOrder=defaultRooms&&defaultRooms.length>0?defaultRooms:MASTER_ROOMS;
   const sortedRooms=[...roomOrder.filter(r=>patientRooms.some(pr=>pr.toLowerCase()===r.toLowerCase())),...patientRooms.filter(pr=>!roomOrder.some(r=>r.toLowerCase()===pr.toLowerCase())).sort()];
   if(sortedRooms.length===0)return '\n(Belum ada pasien yang terdaftar di ruangan rawat inap)';
-  return sortedRooms.map(r=>{const roomPatients=patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase());if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style,i);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
+  return sortedRooms.map(r=>{const roomPatients=sortPatientsByRoom(patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase()));if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style,i);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
 }
 
 export function getDatesBetween(startDate:string,endDate:string):string[]{const result:string[]=[];const current=parseDateSafely(startDate);const stop=parseDateSafely(endDate);let count=0;while(current.getTime()<=stop.getTime()&&count<60){result.push(formatDateIso(current));current.setDate(current.getDate()+1);count++;}return result;}

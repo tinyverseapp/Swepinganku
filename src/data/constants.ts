@@ -127,6 +127,57 @@ export const DEFAULT_ROOMS = MASTER_ROOMS;
 export const BED_ONLY_ROOMS: string[] = ['NICU','PICU','ICCU','ICU'];
 export function isBedRoom(roomName?: string): boolean { if (!roomName) return false; const upper = roomName.trim().toUpperCase(); return BED_ONLY_ROOMS.some((r) => r.toUpperCase() === upper); }
 export function normalizeRoomName(roomName?: string): string { if (!roomName) return ''; const trimmed = roomName.trim(); const found = MASTER_ROOMS.find((r) => r.toLowerCase() === trimmed.toLowerCase()); return found || trimmed; }
+
+/**
+ * Mengembalikan indeks urutan ruangan berdasarkan MASTER_ROOMS.
+ * Ruangan yang tidak terdaftar di MASTER_ROOMS diletakkan setelah MASTER_ROOMS secara alfabetis.
+ */
+export function getRoomSortIndex(roomName?: string): number {
+  if (!roomName) return 9999;
+  const norm = normalizeRoomName(roomName).toLowerCase();
+  const idx = MASTER_ROOMS.findIndex((r) => r.toLowerCase() === norm);
+  if (idx !== -1) return idx;
+  return 1000;
+}
+
+/**
+ * Membandingkan 2 pasien berdasarkan urutan master ruangan, lalu nomor bed / kamar, lalu nama pasien.
+ */
+export function comparePatientsByRoom(a: Patient, b: Patient): number {
+  const normA = normalizeRoomName(a.room);
+  const normB = normalizeRoomName(b.room);
+
+  const idxA = getRoomSortIndex(normA);
+  const idxB = getRoomSortIndex(normB);
+
+  if (idxA !== idxB) {
+    if (idxA < 1000 || idxB < 1000) {
+      return idxA - idxB;
+    }
+    // Keduanya ruangan kustom luar MASTER_ROOMS: urut alfabetis
+    const roomCmp = normA.localeCompare(normB, 'id', { sensitivity: 'base' });
+    if (roomCmp !== 0) return roomCmp;
+  } else if (idxA >= 1000) {
+    const roomCmp = normA.localeCompare(normB, 'id', { sensitivity: 'base' });
+    if (roomCmp !== 0) return roomCmp;
+  }
+
+  // Jika ruangan sama, susun berdasarkan nomor Kamar/Bed secara natural (e.g. Bed 1, Bed 2, Bed 10)
+  const kamarA = (a.kamar || '').trim();
+  const kamarB = (b.kamar || '').trim();
+  const kamarCmp = kamarA.localeCompare(kamarB, 'id', { numeric: true, sensitivity: 'base' });
+  if (kamarCmp !== 0) return kamarCmp;
+
+  // Jika kamar sama, susun nama pasien
+  return (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' });
+}
+
+/**
+ * Menyortir array pasien sesuai urutan ruangan resmi
+ */
+export function sortPatientsByRoom(patients: Patient[]): Patient[] {
+  return [...patients].sort(comparePatientsByRoom);
+}
 export function formatKamarOrBed(roomName?: string, kamarVal?: string): string { const isBed = isBedRoom(roomName); if (!kamarVal || !kamarVal.trim() || kamarVal.trim() === '-' || kamarVal.trim().toLowerCase() === 'kamar -') return isBed ? 'Bed -' : 'K-'; const clean = kamarVal.trim(); if (isBed) return /^bed\s*/i.test(clean) ? clean.replace(/^bed\s*/i, 'Bed ') : `Bed ${clean}`; let nonBed = clean; if (/^kamar\s*/i.test(nonBed)) nonBed = nonBed.replace(/^kamar\s*/i, ''); else if (/^k[\.\s]+/i.test(nonBed)) nonBed = nonBed.replace(/^k[\.\s]+/i, ''); else if (/^k(?=[0-9])/i.test(nonBed)) nonBed = nonBed.replace(/^k/i, ''); return `K${nonBed}`; }
 export function parseAgeInDays(ageStr?: string): number | null {
   if (!ageStr) return null;
