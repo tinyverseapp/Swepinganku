@@ -97,10 +97,10 @@ export function ReportModal({
                   ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
-              title="DPJP & Raber di baris baru dengan indentasi sejajar teks pasien di atasnya (tanpa bullet)"
+              title="DPJP & Raber di baris baru sejajar dengan Bed/kamar (tanpa nomor saat disalin ke WA)"
             >
               <ListCollapse className="w-3.5 h-3.5" />
-              <span>Baris Baru Indent (Rapi)</span>
+              <span>Baris Baru (Sejajar)</span>
             </button>
             <button
               type="button"

@@ -17,12 +17,23 @@ import {
   writeBatch,
   Unsubscribe,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { Patient } from '../types';
-import { parseDateSafely, formatDateIso } from '../utils/storage';
+import { parseDateSafely, formatDateIso, OLD_FAHAD_REGEX, TARGET_FAHAD_NAME, normalizeTargetDoctorName } from '../utils/storage';
 
 const COLLECTION = 'sweepinganku';
 const WEEKLY_HISTORY_TYPE = 'weeklyHistory';
+
+export function sanitizePatientDoctorNames(patient: Patient): Patient {
+  const norm = { ...patient };
+  if (norm.dpjp) {
+    norm.dpjp = normalizeTargetDoctorName(norm.dpjp);
+  }
+  if (norm.supervisingDpjp) {
+    norm.supervisingDpjp = normalizeTargetDoctorName(norm.supervisingDpjp);
+  }
+  return norm;
+}
 
 // Firestore rejects `undefined` anywhere in a document. Optional patient
 // fields may be absent, so sanitize every write at the Firestore boundary.
@@ -98,10 +109,11 @@ function isWeeklyHistory(data: FirestorePatientRecord): boolean {
 }
 
 function historyPayload(patient: Patient, teamCode: string, date: string): FirestorePatientRecord {
+  const cleanPatient = sanitizePatientDoctorNames(patient);
   const recordedAt = new Date().toISOString();
   const weekStart = getWeekStart(date);
   return stripUndefined({
-    ...patient,
+    ...cleanPatient,
     teamCode,
     date,
     recordType: WEEKLY_HISTORY_TYPE,
@@ -109,7 +121,7 @@ function historyPayload(patient: Patient, teamCode: string, date: string): Fires
     weekEnd: getWeekEnd(weekStart),
     firstDate: date,
     lastDate: date,
-    days: { [date]: { patient: { ...patient, teamCode, date }, recordedAt } },
+    days: { [date]: { patient: { ...cleanPatient, teamCode, date }, recordedAt } },
     updatedAt: recordedAt,
   });
 }
@@ -117,27 +129,29 @@ function historyPayload(patient: Patient, teamCode: string, date: string): Fires
 /** Permanently record one patient occurrence for the Monday-Sunday recap. */
 async function recordWeeklyHistory(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode || !date || !patient.rm) return;
-  const payload = historyPayload(patient, teamCode, date);
-  const ref = doc(db, COLLECTION, weeklyDocId(teamCode, payload.weekStart, patient.rm));
+  const cleanPatient = sanitizePatientDoctorNames(patient);
+  const payload = historyPayload(cleanPatient, teamCode, date);
+  const ref = doc(db, COLLECTION, weeklyDocId(teamCode, payload.weekStart, cleanPatient.rm));
   const { days: _days, ...summary } = payload;
-  await setDoc(ref, { ...summary, [`days.${date}`]: { patient: { ...patient, teamCode, date }, recordedAt: summary.updatedAt } }, { merge: true });
+  await setDoc(ref, { ...summary, [`days.${date}`]: { patient: { ...cleanPatient, teamCode, date }, recordedAt: summary.updatedAt } }, { merge: true });
 }
 
 /** Save the current patient list while preserving historical occurrences. */
 export async function savePatientsBatch(teamCode: string, date: string, patients: Patient[]): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   try {
+    const cleanPatients = patients.map(sanitizePatientDoctorNames);
     const q = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', date));
     const existing = await getDocs(q);
     const batch = writeBatch(db);
 
     // Never delete weekly-history documents when replacing a daily list.
-    const desiredIds = new Set(patients.map((p) => makeDocId({ ...p, teamCode, date })));
+    const desiredIds = new Set(cleanPatients.map((p) => makeDocId({ ...p, teamCode, date })));
     existing.docs.forEach((d) => {
       const data = d.data() as FirestorePatientRecord;
       if (isWeeklyHistory(data)) return;
       // Delete only stale records for this team/date; do not replace another user's concurrent patients.
-      const samePatient = patients.some((p) => (p.id && data.id === p.id) || (p.rm && data.rm && p.rm.trim().toLowerCase() === data.rm.trim().toLowerCase()));
+      const samePatient = cleanPatients.some((p) => (p.id && data.id === p.id) || (p.rm && data.rm && p.rm.trim().toLowerCase() === data.rm.trim().toLowerCase()));
       if (samePatient && !desiredIds.has(d.id)) batch.delete(d.ref);
     });
 
@@ -145,7 +159,7 @@ export async function savePatientsBatch(teamCode: string, date: string, patients
     const weekStart = getWeekStart(date);
     const weekEnd = getWeekEnd(weekStart);
 
-    patients.forEach((p) => {
+    cleanPatients.forEach((p) => {
       const normalized = stripUndefined({ ...p, teamCode, date, updatedAt: recordedAt });
       batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
       const legacyId = makeLegacyDocId(normalized);
@@ -180,7 +194,7 @@ export async function fetchPatientsFromFirestore(teamCode: string, date: string)
   return snap.docs
     .map((d) => d.data() as FirestorePatientRecord)
     .filter((data) => !isWeeklyHistory(data))
-    .map((data) => data as Patient);
+    .map((data) => sanitizePatientDoctorNames(data as Patient));
 }
 
 /** Fetch only current daily patients for the requested date range. */
@@ -191,7 +205,7 @@ export async function fetchPatientsForDateRange(teamCode: string, startDate: str
   return snap.docs
     .map((d) => d.data() as FirestorePatientRecord)
     .filter((data) => !isWeeklyHistory(data))
-    .map((data) => data as Patient);
+    .map((data) => sanitizePatientDoctorNames(data as Patient));
 }
 
 /** Backfill weekly history from existing daily records. */
@@ -333,7 +347,7 @@ export function subscribeToPatients(teamCode: string, date: string, callback: (p
     const patients = snap.docs
       .map((d) => d.data() as FirestorePatientRecord)
       .filter((data) => !isWeeklyHistory(data))
-      .map((data) => data as Patient);
+      .map((data) => sanitizePatientDoctorNames(data as Patient));
     callback(patients);
   }, (err) => {
     console.error('[Firestore] subscribeToPatients error:', err);
@@ -348,7 +362,7 @@ export function subscribeToTeamAllPatients(teamCode: string, callback: (patients
     const patients = snap.docs
       .map((d) => d.data() as FirestorePatientRecord)
       .filter((data) => !isWeeklyHistory(data))
-      .map((data) => data as Patient);
+      .map((data) => sanitizePatientDoctorNames(data as Patient));
     callback(patients);
   }, (err) => {
     console.error('[Firestore] subscribeToTeamAllPatients error:', err);
@@ -357,11 +371,12 @@ export function subscribeToTeamAllPatients(teamCode: string, callback: (patients
 }
 
 export async function deletePatientFromFirestore(patient: Patient & { teamCode?: string; date?: string }): Promise<void> {
-  const teamCode = patient.teamCode || '';
-  const date = patient.date || '';
+  const cleanPatient = sanitizePatientDoctorNames(patient);
+  const teamCode = cleanPatient.teamCode || '';
+  const date = cleanPatient.date || '';
   // Keep the weekly occurrence before deleting the daily record.
-  if (teamCode && date && patient.rm) await recordWeeklyHistory(patient, teamCode, date);
-  await deleteDoc(doc(db, COLLECTION, makeDocId(patient)));
+  if (teamCode && date && cleanPatient.rm) await recordWeeklyHistory(cleanPatient, teamCode, date);
+  await deleteDoc(doc(db, COLLECTION, makeDocId(cleanPatient)));
 }
 
 export async function deleteAllPatientsForDateFromFirestore(teamCode: string, date: string): Promise<void> {
@@ -381,7 +396,8 @@ export async function deleteAllPatientsForDateFromFirestore(teamCode: string, da
 
 export async function upsertPatientToFirestore(patient: Patient, teamCode: string, date: string): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
-  const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: new Date().toISOString() });
+  const cleanPatient = sanitizePatientDoctorNames(patient);
+  const normalized = stripUndefined({ ...cleanPatient, teamCode, date, updatedAt: new Date().toISOString() });
   await setDoc(doc(db, COLLECTION, makeDocId(normalized)), normalized);
   // Stable IDs are authoritative. Do not speculatively delete a legacy
   // document whose existence has not been verified.
@@ -392,11 +408,12 @@ export async function upsertPatientToFirestore(patient: Patient, teamCode: strin
 export async function upsertPatientsToFirestore(patients: Patient[], teamCode: string, date: string): Promise<void> {
   if (!teamCode) throw new Error('Kode tim Firebase kosong.');
   if (!patients.length) return;
+  const cleanPatients = patients.map(sanitizePatientDoctorNames);
   const batch = writeBatch(db);
   const recordedAt = new Date().toISOString();
   const weekStart = getWeekStart(date);
   const weekEnd = getWeekEnd(weekStart);
-  patients.forEach((patient) => {
+  cleanPatients.forEach((patient) => {
     const normalized = stripUndefined({ ...patient, teamCode, date, updatedAt: recordedAt });
     batch.set(doc(db, COLLECTION, makeDocId(normalized)), normalized);
     // AI import is atomic: never add speculative legacy deletes because a
@@ -423,23 +440,107 @@ export async function movePatientToDateFirestore(patient: Patient, teamCode: str
   if (!fromDate || !toDate) throw new Error('Tanggal asal/tujuan tidak valid.');
   if (fromDate === toDate) throw new Error('Tanggal tujuan sama dengan tanggal asal.');
 
+  const cleanPatient = sanitizePatientDoctorNames(patient);
   const targetQuery = query(collection(db, COLLECTION), where('teamCode', '==', teamCode), where('date', '==', toDate));
   const targetSnap = await getDocs(targetQuery);
-  const patientRm = patient.rm?.trim().toLowerCase();
+  const patientRm = cleanPatient.rm?.trim().toLowerCase();
   const duplicate = targetSnap.docs.some((d) => {
     const data = d.data() as FirestorePatientRecord;
     return !isWeeklyHistory(data) && !!patientRm && data.rm?.trim().toLowerCase() === patientRm;
   });
-  if (duplicate) throw new Error(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${toDate}.`);
+  if (duplicate) throw new Error(`Pasien dengan No. RM ${cleanPatient.rm || '-'} sudah ada pada ${toDate}.`);
 
-  const movedPatient: Patient = { ...patient, teamCode, date: toDate, updatedAt: new Date().toISOString() };
-  await recordWeeklyHistory(patient, teamCode, fromDate);
+  const movedPatient: Patient = { ...cleanPatient, teamCode, date: toDate, updatedAt: new Date().toISOString() };
+  await recordWeeklyHistory(cleanPatient, teamCode, fromDate);
   await recordWeeklyHistory(movedPatient, teamCode, toDate);
 
   const batch = writeBatch(db);
-  batch.delete(doc(db, COLLECTION, makeDocId({ ...patient, teamCode, date: fromDate })));
+  batch.delete(doc(db, COLLECTION, makeDocId({ ...cleanPatient, teamCode, date: fromDate })));
   // Delete only the known stable source document. Legacy cleanup is not
   // performed speculatively during a move.
   batch.set(doc(db, COLLECTION, makeDocId(movedPatient)), movedPatient);
   await batch.commit();
+}
+
+/**
+ * Migrasi nama dokter di seluruh database Firestore (koleksi sweepinganku).
+ * Mengubah setiap kemunculan variasi nama 'dr. Fahad Ahmed Shah Khaisama T., Sp.BA'
+ * menjadi 'dr. Fahad Ahmed Shah K., Sp.BA' pada data pasien harian maupun rekap mingguan.
+ */
+export async function migrateDoctorNamesInFirestore(): Promise<number> {
+  if (!auth.currentUser) return 0;
+  try {
+    const q = collection(db, COLLECTION);
+    const snap = await getDocs(q);
+    let updatedCount = 0;
+    
+    let currentBatch = writeBatch(db);
+    let batchOps = 0;
+
+    for (const d of snap.docs) {
+      const data = d.data() as FirestorePatientRecord;
+      let changed = false;
+      const updatedData: Record<string, any> = { ...data };
+
+      if (data.dpjp && (OLD_FAHAD_REGEX.test(data.dpjp) || data.dpjp.includes('Khaisama'))) {
+        updatedData.dpjp = TARGET_FAHAD_NAME;
+        changed = true;
+      }
+      if (data.supervisingDpjp && (OLD_FAHAD_REGEX.test(data.supervisingDpjp) || data.supervisingDpjp.includes('Khaisama'))) {
+        updatedData.supervisingDpjp = TARGET_FAHAD_NAME;
+        changed = true;
+      }
+
+      if (isWeeklyHistory(data) && data.days && typeof data.days === 'object') {
+        const newDays: Record<string, any> = { ...data.days };
+        let daysChanged = false;
+        Object.entries(newDays).forEach(([dayKey, dayVal]) => {
+          if (dayVal?.patient) {
+            const pat = { ...dayVal.patient };
+            let patChanged = false;
+            if (pat.dpjp && (OLD_FAHAD_REGEX.test(pat.dpjp) || pat.dpjp.includes('Khaisama'))) {
+              pat.dpjp = TARGET_FAHAD_NAME;
+              patChanged = true;
+            }
+            if (pat.supervisingDpjp && (OLD_FAHAD_REGEX.test(pat.supervisingDpjp) || pat.supervisingDpjp.includes('Khaisama'))) {
+              pat.supervisingDpjp = TARGET_FAHAD_NAME;
+              patChanged = true;
+            }
+            if (patChanged) {
+              newDays[dayKey] = { ...dayVal, patient: pat };
+              daysChanged = true;
+            }
+          }
+        });
+        if (daysChanged) {
+          updatedData.days = newDays;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        currentBatch.set(d.ref, stripUndefined(updatedData), { merge: true });
+        batchOps++;
+        updatedCount++;
+
+        if (batchOps >= 400) {
+          await currentBatch.commit();
+          currentBatch = writeBatch(db);
+          batchOps = 0;
+        }
+      }
+    }
+
+    if (batchOps > 0) {
+      await currentBatch.commit();
+    }
+
+    if (updatedCount > 0) {
+      console.log(`[Firestore Migration] Berhasil memperbarui ${updatedCount} dokumen ke nama dokter baru: ${TARGET_FAHAD_NAME}`);
+    }
+    return updatedCount;
+  } catch (err) {
+    console.error('[Firestore Migration] Gagal melakukan migrasi nama dokter:', err);
+    return 0;
+  }
 }

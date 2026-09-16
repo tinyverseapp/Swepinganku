@@ -11,11 +11,14 @@ import {
   saveCurrentTeam,
   handoverYesterdayPatients,
   getStorageKey,
-  isRemovedDoctor
+  isRemovedDoctor,
+  cleanRemovedDoctorsFromStorage
 } from './utils/storage';
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
-import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore } from './lib/firestoreService';
+import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
 import { ControlsBar } from './components/ControlsBar';
@@ -70,6 +73,19 @@ export default function App() {
   const showToast = useCallback((msg: string) => setToastMessage(msg), []);
 
   useEffect(() => { if (!toastMessage) return; const timer = setTimeout(() => setToastMessage(null), 3200); return () => clearTimeout(timer); }, [toastMessage]);
+
+  useEffect(() => {
+    cleanRemovedDoctorsFromStorage();
+    if (auth.currentUser) {
+      migrateDoctorNamesInFirestore().catch(() => {});
+    }
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        migrateDoctorNamesInFirestore().catch(() => {});
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (!activeTeam.teamCode) return;

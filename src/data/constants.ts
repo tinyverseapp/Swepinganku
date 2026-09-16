@@ -2,7 +2,7 @@ import { Patient } from '../types';
 
 export const DIVISIONS: string[] = ['Bedah Digestif & Umum','Bedah Anak','Urologi','Ortopedi','Bedah Saraf','BTKV','Bedah Plastik','Bedah Onkologi'];
 export const DIVISION_CONSULTANTS: Record<string, string[]> = {
-  'Bedah Anak': ['dr. Santi Rini., Sp.BA., Subsp.DA(K)','dr. Fahad Ahmed Shah Khaisama T., Sp.BA'],
+  'Bedah Anak': ['dr. Santi Rini., Sp.BA., Subsp.DA(K)','dr. Fahad Ahmed Shah K., Sp.BA'],
   'Bedah Plastik': ['dr. Andi Mohammad Ardan, SpBP-RE','dr. Yudhy Arius, Sp.BP-RE'],
   'Bedah Onkologi': ['dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes','dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
   'Urologi': ['dr. Poppy Desra Syahfitri Nasution, Sp.U','dr. Made Adi Wiratama, Sp.U, M.Ked.Klin, FICS','dr. Muhammad Rozaqy Ishaq, Sp.U, M.Ked.Klin','dr. Boyke Soebhali, Sp.U(K)','dr. Ricky Agave Ompusunggu, Sp.U'],
@@ -178,7 +178,17 @@ export function comparePatientsByRoom(a: Patient, b: Patient): number {
 export function sortPatientsByRoom(patients: Patient[]): Patient[] {
   return [...patients].sort(comparePatientsByRoom);
 }
-export function formatKamarOrBed(roomName?: string, kamarVal?: string): string { const isBed = isBedRoom(roomName); if (!kamarVal || !kamarVal.trim() || kamarVal.trim() === '-' || kamarVal.trim().toLowerCase() === 'kamar -') return isBed ? 'Bed -' : 'K-'; const clean = kamarVal.trim(); if (isBed) return /^bed\s*/i.test(clean) ? clean.replace(/^bed\s*/i, 'Bed ') : `Bed ${clean}`; let nonBed = clean; if (/^kamar\s*/i.test(nonBed)) nonBed = nonBed.replace(/^kamar\s*/i, ''); else if (/^k[\.\s]+/i.test(nonBed)) nonBed = nonBed.replace(/^k[\.\s]+/i, ''); else if (/^k(?=[0-9])/i.test(nonBed)) nonBed = nonBed.replace(/^k/i, ''); return `K${nonBed}`; }
+export function formatKamarOrBed(roomName?: string, kamarVal?: string): string {
+  const isBed = isBedRoom(roomName);
+  if (!kamarVal || !kamarVal.trim() || kamarVal.trim() === '-' || kamarVal.trim().toLowerCase() === 'kamar -') return isBed ? 'Bed -' : 'K-';
+  const clean = kamarVal.trim();
+  if (isBed || /^bed\s*/i.test(clean)) return /^bed\s*/i.test(clean) ? clean.replace(/^bed\s*/i, 'Bed ') : `Bed ${clean}`;
+  let nonBed = clean;
+  if (/^kamar\s*/i.test(nonBed)) nonBed = nonBed.replace(/^kamar\s*/i, '');
+  else if (/^k[\.\s]+/i.test(nonBed)) nonBed = nonBed.replace(/^k[\.\s]+/i, '');
+  else if (/^k(?=[0-9])/i.test(nonBed)) nonBed = nonBed.replace(/^k/i, '');
+  return `K${nonBed}`;
+}
 export function parseAgeInDays(ageStr?: string): number | null {
   if (!ageStr) return null;
   const s = ageStr.toLowerCase().trim();

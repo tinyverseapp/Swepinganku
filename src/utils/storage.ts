@@ -36,11 +36,132 @@ export function formatIndonesianDate(dateStr:string,options?:Intl.DateTimeFormat
 export function getDefaultTeam(division:string,koasName?:string):DivisionTeam{return {teamCode:getDefaultTeamCode(division),division,teamName:`Tim ${division}`,members:[koasName||'dr. Muda / Koas Bedah']};}
 export function getActiveTeam(defaultDivision?:string,defaultKoasName?:string):DivisionTeam{const raw=localStorage.getItem(`${KEY_PREFIX}:activeTeam`);if(raw){try{const parsed=JSON.parse(raw);if(parsed&&parsed.teamCode){if(defaultDivision&&parsed.division!==defaultDivision){parsed.division=defaultDivision;if(!parsed.teamName||parsed.teamName.startsWith('Tim '))parsed.teamName=`Tim ${defaultDivision}`;localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(parsed));}return parsed;}}catch{}}const div=defaultDivision||'Bedah Digestif & Umum';const def=getDefaultTeam(div,defaultKoasName);localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(def));return def;}
 export function setActiveTeam(team:DivisionTeam):void{localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(team));}
+export const OLD_FAHAD_REGEX = /fahad.*khaisama/i;
+export const TARGET_FAHAD_NAME = 'dr. Fahad Ahmed Shah K., Sp.BA';
+
+export function normalizeTargetDoctorName(name?: string): string {
+  if (!name) return '';
+  if (OLD_FAHAD_REGEX.test(name) || name.includes('Khaisama') || /fahad\s+ahmed\s+shah\s+khaisama/i.test(name)) {
+    return TARGET_FAHAD_NAME;
+  }
+  return name;
+}
+
 export function isRemovedDoctor(dpjp?:string):boolean{if(!dpjp)return false;const s=dpjp.toLowerCase();return /\bhendra\b/i.test(s)||/\bandi\s+w[\.,\s]/i.test(dpjp)||/\bandi\s+w$/i.test(dpjp);}
-export function cleanRemovedDoctorsFromStorage():void{if(typeof window==='undefined'||!window.localStorage)return;try{const keys:string[]=[];for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&(key.startsWith(KEY_PREFIX)||key.startsWith('sweeping:')))keys.push(key);}const ids=new Set(['p-1994648','p-02029139','p-02032640','p-02026511','p-02031900','p-02032317','p-02034100','p-02026268','p-02031580','p-02028071','p-01952560','p-01983979','p-02032635']);keys.forEach(k=>{const val=localStorage.getItem(k);if(!val)return;try{const parsed=JSON.parse(val);if(Array.isArray(parsed)){const cleaned=parsed.filter((p:any)=>!isRemovedDoctor(p?.dpjp)&&!ids.has(p?.id));if(cleaned.length!==parsed.length)localStorage.setItem(k,JSON.stringify(cleaned));}}catch{}});}catch{}}
+export function cleanRemovedDoctorsFromStorage():void{
+  if(typeof window==='undefined'||!window.localStorage)return;
+  try{
+    const keys:string[]=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key&&(key.startsWith(KEY_PREFIX)||key.startsWith('sweeping:')))keys.push(key);
+    }
+    const ids=new Set(['p-1994648','p-02029139','p-02032640','p-02026511','p-02031900','p-02032317','p-02034100','p-02026268','p-02031580','p-02028071','p-01952560','p-01983979','p-02032635']);
+    keys.forEach(k=>{
+      const val=localStorage.getItem(k);
+      if(!val)return;
+      try{
+        const parsed=JSON.parse(val);
+        if(Array.isArray(parsed)){
+          let modified=false;
+          const cleaned=parsed
+            .filter((p:any)=>!isRemovedDoctor(p?.dpjp)&&!ids.has(p?.id))
+            .map((p:any)=>{
+              let pChanged=false;
+              const updated={...p};
+              if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
+                updated.dpjp=TARGET_FAHAD_NAME;
+                pChanged=true;
+              }
+              if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
+                updated.supervisingDpjp=TARGET_FAHAD_NAME;
+                pChanged=true;
+              }
+              if(pChanged)modified=true;
+              return updated;
+            });
+          if(cleaned.length!==parsed.length||modified)localStorage.setItem(k,JSON.stringify(cleaned));
+        } else if(parsed&&typeof parsed==='object'){
+          let objChanged=false;
+          if(parsed.dpjp&&(OLD_FAHAD_REGEX.test(parsed.dpjp)||parsed.dpjp.includes('Khaisama'))){
+            parsed.dpjp=TARGET_FAHAD_NAME;
+            objChanged=true;
+          }
+          if(parsed.supervisingDpjp&&(OLD_FAHAD_REGEX.test(parsed.supervisingDpjp)||parsed.supervisingDpjp.includes('Khaisama'))){
+            parsed.supervisingDpjp=TARGET_FAHAD_NAME;
+            objChanged=true;
+          }
+          if(objChanged)localStorage.setItem(k,JSON.stringify(parsed));
+        }
+      }catch{}
+    });
+  }catch{}
+}
 if(typeof window!=='undefined')cleanRemovedDoctorsFromStorage();
-export function loadPatients(date:string,division:string,teamCode?:string):Patient[]{const k=getStorageKey(date,division,teamCode);const raw=localStorage.getItem(k);if(raw){try{const list=JSON.parse(raw);if(Array.isArray(list)&&list.length>0){const filtered=list.filter((p:Patient)=>!isRemovedDoctor(p?.dpjp));if(filtered.length!==list.length)savePatients(date,division,filtered,teamCode);return filtered;}}catch{return []}}if(teamCode){const legacyKey=getStorageKey(date,division),legacyRaw=localStorage.getItem(legacyKey);if(legacyRaw){try{const legacyList=JSON.parse(legacyRaw);if(Array.isArray(legacyList)&&legacyList.length>0){const filtered=legacyList.filter((p:Patient)=>!isRemovedDoctor(p?.dpjp));savePatients(date,division,filtered,teamCode);return filtered;}}catch{}}}return []}
-export function savePatients(date:string,division:string,patients:Patient[],teamCode?:string):void{const k=getStorageKey(date,division,teamCode);const normalized=(Array.isArray(patients)?patients:[]).map(p=>({...p,name:p.name?p.name.trim():''}));localStorage.setItem(k,JSON.stringify(normalized));if(teamCode)saveTeamPatientsServer(teamCode,date,normalized).catch(()=>{});}
+export function loadPatients(date:string,division:string,teamCode?:string):Patient[]{
+  const k=getStorageKey(date,division,teamCode);
+  const raw=localStorage.getItem(k);
+  if(raw){
+    try{
+      const list=JSON.parse(raw);
+      if(Array.isArray(list)&&list.length>0){
+        let modified=false;
+        const filtered=list
+          .filter((p:Patient)=>!isRemovedDoctor(p?.dpjp))
+          .map((p:Patient)=>{
+            const updated={...p};
+            if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
+              updated.dpjp=TARGET_FAHAD_NAME;
+              modified=true;
+            }
+            if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
+              updated.supervisingDpjp=TARGET_FAHAD_NAME;
+              modified=true;
+            }
+            return updated;
+          });
+        if(filtered.length!==list.length||modified)savePatients(date,division,filtered,teamCode);
+        return filtered;
+      }
+    }catch{return []}
+  }
+  if(teamCode){
+    const legacyKey=getStorageKey(date,division),legacyRaw=localStorage.getItem(legacyKey);
+    if(legacyRaw){
+      try{
+        const legacyList=JSON.parse(legacyRaw);
+        if(Array.isArray(legacyList)&&legacyList.length>0){
+          const filtered=legacyList
+            .filter((p:Patient)=>!isRemovedDoctor(p?.dpjp))
+            .map((p:Patient)=>{
+              const updated={...p};
+              if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
+                updated.dpjp=TARGET_FAHAD_NAME;
+              }
+              if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
+                updated.supervisingDpjp=TARGET_FAHAD_NAME;
+              }
+              return updated;
+            });
+          savePatients(date,division,filtered,teamCode);
+          return filtered;
+        }
+      }catch{}
+    }
+  }
+  return []
+}
+export function savePatients(date:string,division:string,patients:Patient[],teamCode?:string):void{
+  const k=getStorageKey(date,division,teamCode);
+  const normalized=(Array.isArray(patients)?patients:[]).map(p=>({
+    ...p,
+    name:p.name?p.name.trim():'',
+    dpjp: normalizeTargetDoctorName(p.dpjp),
+    supervisingDpjp: p.supervisingDpjp ? normalizeTargetDoctorName(p.supervisingDpjp) : undefined,
+  }));
+  localStorage.setItem(k,JSON.stringify(normalized));
+  if(teamCode)saveTeamPatientsServer(teamCode,date,normalized).catch(()=>{});
+}
 export function clearPatientsForDate(date:string,division:string,teamCode?:string):void{savePatients(date,division,[],teamCode);try{if(teamCode){localStorage.removeItem(getStorageKey(date,division));}}catch{}}
 export async function fetchTeamPatientsServer(teamCode:string,date:string):Promise<Patient[]|null>{try{const res=await fetch(`/api/teams/${encodeURIComponent(teamCode)}/patients?date=${encodeURIComponent(date)}`);if(!res.ok)return null;const data=await res.json();if(data&&Array.isArray(data.patients))return data.patients.map((p:Patient)=>({...p,name:formatPatientNameWithHonorific(p.name,p.age,p.jk)}));}catch{}return null;}
 export async function saveTeamPatientsServer(teamCode:string,date:string,patients:Patient[],memberName?:string):Promise<boolean>{try{const res=await fetch(`/api/teams/${encodeURIComponent(teamCode)}/patients`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date,patients,memberName})});return res.ok;}catch{return false;}}
@@ -59,7 +180,7 @@ export function handoverYesterdayPatients(todayDate:string,division:string,_carr
 
 export type ReportFormatStyle = 'multiline' | 'inline';
 
-export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multiline', index: number = 0): string {
+export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multiline', _index: number = 0): string {
   const doctor = p.dpjp || '-';
   const supervising = p.supervisingDpjp || '-';
   const isRaber = p.doctorRole === 'RABER';
@@ -71,15 +192,12 @@ export function roleTextForPatient(p: Patient, style: ReportFormatStyle = 'multi
     return ` / DPJP: ${doctor}`;
   }
 
-  // Unicode Braille Pattern Blank (\u2800) is classified as a graphic symbol (category 'So'), NOT whitespace.
-  // WhatsApp trims leading ASCII spaces and Unicode whitespace, but NEVER trims \u2800.
-  // 3 Braille blanks align the text directly under 'Bed' for single digit numbers (e.g. '1. Bed'),
-  // and 4 Braille blanks align directly under 'Bed' for double digit numbers (e.g. '10. Bed').
-  const indent = (index + 1) >= 10 ? '\u2800\u2800\u2800\u2800' : '\u2800\u2800\u2800';
-
-  if (isRaber) return `\n${indent}DPJP: ${supervising}\n${indent}Raber: ${doctor}`;
-  if (isKonsul) return `\n${indent}DPJP: ${supervising}\n${indent}Konsul: ${doctor}`;
-  return `\n${indent}DPJP: ${doctor}`;
+  // Multiline without numbering in WhatsApp:
+  // Since the patient line starts with Bed/Kamar (no number prefix like '1. '),
+  // DPJP & Raber start cleanly at the beginning of the line, perfectly aligned with Bed/Kamar.
+  if (isRaber) return `\nDPJP: ${supervising}\nRaber: ${doctor}`;
+  if (isKonsul) return `\nDPJP: ${supervising}\nKonsul: ${doctor}`;
+  return `\nDPJP: ${doctor}`;
 }
 
 function roleLinesForPatient(p: Patient, index: number = 0): string {
@@ -125,11 +243,11 @@ export function generateDocSweepingReportText({mode,date,division,koasName,selec
       if(!includeEmptyRooms)return '';
       return `*${r.toUpperCase()} (0)*\n__________________\n`;
     }
-    const lines=roomPatients.map((p,i)=>{
+    const lines=roomPatients.map((p)=>{
       const bedOrKamar=formatKamarOrBed(p.room,p.kamar);
       const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);
-      const roleText=roleTextForPatient(p,style,i);
-      return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;
+      const roleText=roleTextForPatient(p,style);
+      return `${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;
     }).join(style === 'inline' ? '\n' : '\n\n');
     return `*${r.toUpperCase()} (${roomPatients.length})*\n${lines}\n`;
   }).filter(Boolean).join('\n');
@@ -141,7 +259,7 @@ function formatRoomsReport(patients:Patient[],withDpjp:boolean,defaultRooms:stri
   const patientRooms=[...new Set(patients.map(p=>normalizeRoomName(p.room)))];const roomOrder=defaultRooms&&defaultRooms.length>0?defaultRooms:MASTER_ROOMS;
   const sortedRooms=[...roomOrder.filter(r=>patientRooms.some(pr=>pr.toLowerCase()===r.toLowerCase())),...patientRooms.filter(pr=>!roomOrder.some(r=>r.toLowerCase()===pr.toLowerCase())).sort()];
   if(sortedRooms.length===0)return '\n(Belum ada pasien yang terdaftar di ruangan rawat inap)';
-  return sortedRooms.map(r=>{const roomPatients=sortPatientsByRoom(patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase()));if(!roomPatients.length)return '';const lines=roomPatients.map((p,i)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style,i);return `${i+1}. ${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
+  return sortedRooms.map(r=>{const roomPatients=sortPatientsByRoom(patients.filter(p=>normalizeRoomName(p.room).toLowerCase()===r.toLowerCase()));if(!roomPatients.length)return '';const lines=roomPatients.map((p)=>{const bedOrKamar=formatKamarOrBed(p.room,p.kamar);const formattedName=formatPatientNameWithHonorific(p.name,p.age,p.jk);const roleText=roleTextForPatient(p,style);return `${bedOrKamar} / ${formattedName} / ${p.jk||'-'} / ${p.age||'-'} / ${p.rm||'-'} / ${p.dx||'-'}${roleText}`;}).join(style === 'inline' ? '\n' : '\n\n');return `\n*${r} (${roomPatients.length} pasien)*\n────────────────────\n${lines}`;}).filter(Boolean).join('\n');
 }
 
 export function getDatesBetween(startDate:string,endDate:string):string[]{const result:string[]=[];const current=parseDateSafely(startDate);const stop=parseDateSafely(endDate);let count=0;while(current.getTime()<=stop.getTime()&&count<60){result.push(formatDateIso(current));current.setDate(current.getDate()+1);count++;}return result;}

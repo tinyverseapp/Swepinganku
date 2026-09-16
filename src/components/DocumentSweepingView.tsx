@@ -179,9 +179,9 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
                       ? 'bg-white text-teal-800 shadow-xs border border-slate-200/80'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
-                  title="DPJP & Raber di baris baru dengan indentasi sejajar teks pasien di atasnya (tanpa bullet)"
+                  title="DPJP & Raber di baris baru sejajar dengan Bed/kamar (tanpa nomor saat disalin ke WA)"
                 >
-                  Baris Baru Indent (Rapi)
+                  Baris Baru (Sejajar)
                 </button>
                 <button
                   type="button"
