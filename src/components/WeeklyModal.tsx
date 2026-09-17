@@ -4,7 +4,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { WeeklyRow, Patient } from '../types';
 import { db } from '../lib/firebase';
 import { formatKamarOrBed, normalizeRoomName, formatPatientNameWithHonorific, formatRoomDisplay } from '../data/constants';
-import { exportWeeklyCSV, exportPatientsCSV, parseDateSafely, formatDateIso } from '../utils/storage';
+import { exportWeeklyCSV, exportPatientsCSV, parseDateSafely, formatDateIso, formatDpjpRaberCo } from '../utils/storage';
 import { fetchPatientsForDateRange, seedWeeklyHistory, subscribeToWeeklyHistory, WeeklyHistoryRecord } from '../lib/firestoreService';
 
 interface WeeklyModalProps { isOpen: boolean; currentDate: string; division: string; teamCode?: string; onClose: () => void; }
@@ -48,22 +48,23 @@ function buildWeeklyData(records: WeeklyHistoryRecord[], startDate: string, endD
       const row = existing || {
         rm: p.rm,
         name: formatPatientNameWithHonorific(p.name, p.age, p.jk),
-        jk: p.jk || '-', age: p.age || '-', dpjp: p.dpjp || '-', dx: p.dx || '',
+        jk: p.jk || '-', dob: p.dob || '', age: p.age || '-', dpjp: p.dpjp || '-', dx: p.dx || '',
         first: dt, last: dt, lastRoom: normalizeRoomName(p.room), lastKamar: p.kamar || '', days: {},
         weeklyStatus: status as WeeklyStatus,
         admissionDate
       };
 
+      if (p.dob && !row.dob) row.dob = p.dob;
       if (dt < row.first) row.first = dt;
       if (dt >= row.last) {
         row.last = dt;
         row.rm = p.rm || row.rm;
         row.name = formatPatientNameWithHonorific(p.name, p.age, p.jk);
-        row.jk = p.jk || row.jk; row.age = p.age || row.age; row.dpjp = p.dpjp || row.dpjp; row.dx = p.dx || row.dx;
+        row.jk = p.jk || row.jk; if (p.dob) row.dob = p.dob; row.age = p.age || row.age; row.dpjp = p.dpjp || row.dpjp; row.dx = p.dx || row.dx;
         row.lastRoom = normalizeRoomName(p.room); row.lastKamar = p.kamar || '';
       } else {
         row.name = p.name ? formatPatientNameWithHonorific(p.name, p.age, p.jk) : row.name;
-        row.jk = p.jk || row.jk; row.age = p.age || row.age; row.dpjp = p.dpjp || row.dpjp; row.dx = p.dx || row.dx;
+        row.jk = p.jk || row.jk; if (p.dob && !row.dob) row.dob = p.dob; row.age = p.age || row.age; row.dpjp = p.dpjp || row.dpjp; row.dx = p.dx || row.dx;
       }
       if (status) row.weeklyStatus = status as WeeklyStatus;
       if (admissionDate) row.admissionDate = admissionDate;
@@ -218,7 +219,117 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
       {downloadSuccess && <div className="mt-2 py-2 px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />{downloadSuccess}</div>}
       {error && <div className="mt-2 py-2 px-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">{error}</div>}
       <div className="mt-3 flex-1 overflow-auto border border-slate-200 rounded-xl bg-white">
-        {loading ? <div className="p-12 text-center text-xs text-slate-500"><RefreshCw className="w-7 h-7 animate-spin mx-auto mb-2" />Memuat dan menyinkronkan rekap dari Firebase...</div> : activeTab === 'table' ? (!detailedPatients.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada data pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-[#70ad47] text-white sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">Diagnosis</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan</th></tr></thead><tbody>{detailedPatients.map((p, i) => { const row = rows.find((r) => rmKey(r.rm) === rmKey(p.rm)); return <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono">{p.rm}</td><td className="p-2.5 font-medium">{p.name}</td><td className="p-2.5">{row ? classificationControl(row) : <StatusBadge />}</td><td className="p-2.5 whitespace-nowrap">{row?.weeklyStatus === 'baru' && row.admissionDate ? formatDateIso(parseDateSafely(row.admissionDate)) : '-'}</td><td className="p-2.5">{p.jk || '-'}</td><td className="p-2.5">{p.age || '-'}</td><td className="p-2.5">{p.dx || '-'}</td><td className="p-2.5">{p.dpjp || '-'}</td><td className="p-2.5">{formatRoomDisplay(p.room, p.kamar)}</td></tr>; })}</tbody></table>) : (!rows.length ? <div className="p-12 text-center text-xs text-slate-500"><Users className="w-8 h-8 text-slate-300 mx-auto mb-2" /><b>Tidak ada riwayat pasien</b></div> : <table className="w-full text-left text-xs border-collapse"><thead><tr className="bg-slate-100 text-slate-700 sticky top-0 font-bold"><th className="p-2.5">No</th><th className="p-2.5">No. RM</th><th className="p-2.5">Nama</th><th className="p-2.5">Status / Klasifikasi</th><th className="p-2.5">Tanggal Masuk</th><th className="p-2.5">JK</th><th className="p-2.5">Usia</th><th className="p-2.5">DPJP</th><th className="p-2.5">Ruangan Terakhir</th><th className="p-2.5">Diagnosis</th>{dates.map((dt) => <th key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{parseDateSafely(dt).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' })}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={r.rm} className="border-b hover:bg-slate-50"><td className="p-2.5">{i + 1}</td><td className="p-2.5 font-mono font-semibold">{r.rm}</td><td className="p-2.5 font-bold whitespace-nowrap">{r.name}</td><td className="p-2.5">{classificationControl(r)}</td><td className="p-2.5 whitespace-nowrap">{r.weeklyStatus === 'baru' && r.admissionDate ? formatDateIso(parseDateSafely(r.admissionDate)) : '-'}</td><td className="p-2.5">{r.jk}</td><td className="p-2.5">{r.age}</td><td className="p-2.5 whitespace-nowrap">{r.dpjp}</td><td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td><td className="p-2.5">{r.dx}</td>{dates.map((dt) => <td key={dt} className="p-2.5 text-center border-l whitespace-nowrap">{r.days[dt] || <span className="text-slate-300">-</span>}</td>)}</tr>)}</tbody></table>)}
+        {loading ? (
+          <div className="p-12 text-center text-xs text-slate-500">
+            <RefreshCw className="w-7 h-7 animate-spin mx-auto mb-2" />
+            Memuat dan menyinkronkan rekap dari Firebase...
+          </div>
+        ) : activeTab === 'table' ? (
+          !detailedPatients.length ? (
+            <div className="p-12 text-center text-xs text-slate-500">
+              <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <b>Tidak ada data pasien</b>
+            </div>
+          ) : (
+            <table className="min-w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#70ad47] text-white sticky top-0 font-bold whitespace-nowrap">
+                  <th className="p-2.5 w-10 min-w-[40px] text-center">No</th>
+                  <th className="p-2.5 w-24 min-w-[90px]">No. RM</th>
+                  <th className="p-2.5 w-44 min-w-[150px] max-w-[180px]">Nama</th>
+                  <th className="p-2.5 w-20 min-w-[70px] text-center">Jenis Kelamin</th>
+                  <th className="p-2.5 w-24 min-w-[90px] text-center">DOB</th>
+                  <th className="p-2.5 w-20 min-w-[70px] text-center">Usia</th>
+                  <th className="p-2.5 w-28 min-w-[100px] text-center">Tanggal Masuk</th>
+                  <th className="p-2.5 min-w-[420px] max-w-[620px]">Diagnosis</th>
+                  <th className="p-2.5 min-w-[180px] max-w-[240px]">DPJP/Raber/Co.</th>
+                  <th className="p-2.5 min-w-[130px]">Ruangan</th>
+                  <th className="p-2.5 w-40 min-w-[150px]">Status Pasien</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detailedPatients.map((p, i) => {
+                  const row = rows.find((r) => rmKey(r.rm) === rmKey(p.rm));
+                  const tglMasuk = row?.weeklyStatus === 'baru' && row.admissionDate
+                    ? formatDateIso(parseDateSafely(row.admissionDate))
+                    : (p.admissionDate ? formatDateIso(parseDateSafely(p.admissionDate)) : (row?.weeklyStatus === 'baru' ? (p.date || '-') : '-'));
+                  return (
+                    <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40 align-top">
+                      <td className="p-2.5 text-center text-slate-500 font-medium">{i + 1}</td>
+                      <td className="p-2.5 font-mono whitespace-nowrap font-semibold">{p.rm}</td>
+                      <td className="p-2.5 font-medium max-w-[180px] break-words">{p.name}</td>
+                      <td className="p-2.5 font-bold text-center">{p.jk || '-'}</td>
+                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{p.dob || '-'}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center">{p.age || '-'}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center">{tglMasuk}</td>
+                      <td className="p-2.5 min-w-[420px] max-w-[620px] leading-relaxed break-words text-slate-800">{p.dx || '-'}</td>
+                      <td className="p-2.5 min-w-[180px] max-w-[240px] leading-snug break-words">{formatDpjpRaberCo(p)}</td>
+                      <td className="p-2.5 whitespace-nowrap">{formatRoomDisplay(p.room, p.kamar)}</td>
+                      <td className="p-2.5">{row ? classificationControl(row) : <StatusBadge />}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )
+        ) : (
+          !rows.length ? (
+            <div className="p-12 text-center text-xs text-slate-500">
+              <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <b>Tidak ada riwayat pasien</b>
+            </div>
+          ) : (
+            <table className="min-w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 sticky top-0 font-bold whitespace-nowrap">
+                  <th className="p-2.5 w-10 min-w-[40px] text-center">No</th>
+                  <th className="p-2.5 w-24 min-w-[90px]">No. RM</th>
+                  <th className="p-2.5 w-44 min-w-[150px] max-w-[180px]">Nama</th>
+                  <th className="p-2.5 w-20 min-w-[70px] text-center">Jenis Kelamin</th>
+                  <th className="p-2.5 w-24 min-w-[90px] text-center">DOB</th>
+                  <th className="p-2.5 w-20 min-w-[70px] text-center">Usia</th>
+                  <th className="p-2.5 w-28 min-w-[100px] text-center">Tanggal Masuk</th>
+                  <th className="p-2.5 min-w-[420px] max-w-[620px]">Diagnosis</th>
+                  <th className="p-2.5 min-w-[180px] max-w-[240px]">DPJP/Raber/Co.</th>
+                  <th className="p-2.5 min-w-[140px]">Ruangan Terakhir</th>
+                  <th className="p-2.5 w-40 min-w-[150px]">Status Pasien</th>
+                  {dates.map((dt) => (
+                    <th key={dt} className="p-2.5 text-center border-l whitespace-nowrap min-w-[95px]">
+                      {parseDateSafely(dt).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit' })}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const tglMasuk = r.weeklyStatus === 'baru' && r.admissionDate
+                    ? formatDateIso(parseDateSafely(r.admissionDate))
+                    : '-';
+                  return (
+                    <tr key={r.rm} className="border-b hover:bg-slate-50 align-top">
+                      <td className="p-2.5 text-center text-slate-500 font-medium">{i + 1}</td>
+                      <td className="p-2.5 font-mono font-semibold whitespace-nowrap">{r.rm}</td>
+                      <td className="p-2.5 font-bold max-w-[180px] break-words">{r.name}</td>
+                      <td className="p-2.5 font-bold text-center">{r.jk || '-'}</td>
+                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{r.dob || '-'}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center">{r.age}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center">{tglMasuk}</td>
+                      <td className="p-2.5 min-w-[420px] max-w-[620px] leading-relaxed break-words text-slate-800">{r.dx}</td>
+                      <td className="p-2.5 min-w-[180px] max-w-[240px] leading-snug break-words">{r.dpjp}</td>
+                      <td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td>
+                      <td className="p-2.5">{classificationControl(r)}</td>
+                      {dates.map((dt) => (
+                        <td key={dt} className="p-2.5 text-center border-l whitespace-nowrap">
+                          {r.days[dt] || <span className="text-slate-300">-</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )
+        )}
       </div>
     </div>
   </div>;

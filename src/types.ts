@@ -8,6 +8,7 @@ export interface Patient {
   name: string;
   /** L/P when known; empty string when the source data is unclear. */
   jk: 'L' | 'P' | '';
+  dob?: string;
   age: string;
   rm: string;
   dx: string;
@@ -41,6 +42,7 @@ export interface WeeklyRow {
   rm: string;
   name: string;
   jk: string;
+  dob?: string;
   age: string;
   dpjp: string;
   dx: string;

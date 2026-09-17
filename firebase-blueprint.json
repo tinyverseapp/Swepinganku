@@ -20,6 +20,11 @@
           "description": "Jenis kelamin L atau P",
           "enum": ["L", "P"]
         },
+        "dob": {
+          "type": "string",
+          "description": "Tanggal lahir pasien (DOB) format YYYY-MM-DD",
+          "maxLength": 50
+        },
         "age": {
           "type": "string",
           "description": "Usia pasien beserta satuan",

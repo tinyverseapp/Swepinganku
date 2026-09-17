@@ -77,7 +77,7 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
   const handleClear = () => { setInputText(''); setParsedList([]); setHasParsed(false); setError(null); setCorrectedNames({}); };
   const updateItem = (index: number, field: keyof ParsedPatientRaw, value: string) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   const updateRole = (index: number, role: DoctorRole) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, doctorRole: role, supervisingDpjp: role === 'DPJP' ? undefined : p.supervisingDpjp } : p));
-  const addItem = () => setParsedList((prev) => [...prev, { name: '', age: '', jk: '', rm: '', room: '', kamar: '', dpjp: '', doctorRole: undefined, supervisingDpjp: undefined, dx: '' }]);
+  const addItem = () => setParsedList((prev) => [...prev, { name: '', age: '', dob: '', jk: '', rm: '', room: '', kamar: '', dpjp: '', doctorRole: undefined, supervisingDpjp: undefined, dx: '' }]);
 
   const handleConfirmImport = () => {
     const valid = parsedList.filter((p) => p.name.trim());
@@ -122,7 +122,9 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
       }
       return {
         id: `pt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-        name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '', rm: p.rm.trim(),
+        name: p.name.trim(), age: p.age.trim(), jk: p.jk === 'P' || p.jk === 'L' ? p.jk : '',
+        dob: p.dob?.trim() || undefined,
+        rm: p.rm.trim(),
         room: normalizeRoomName(p.room) || '', kamar: p.kamar.trim(), dpjp: roleDoctor,
         doctorRole: p.doctorRole as DoctorRole,
         supervisingDpjp: mainDpjp || undefined,
@@ -146,12 +148,19 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800"><b>Periksa struktur dokter:</b> untuk RABER/KONSUL, <b>Dokter Peran</b> = dokter bedah yang menjadi RABER/KONSUL; <b>DPJP Utama</b> = dokter yang bertanggung jawab utama (misalnya dokter anak).</div>
           {parsedList.map((p, index) => { const role = p.doctorRole; const needs = role === 'RABER' || role === 'KONSUL'; return <div key={index} className="rounded-2xl border border-slate-200 p-4 space-y-3">
             <div className="flex justify-between"><b className="text-sm">Pasien {index + 1}</b><button type="button" onClick={() => setParsedList((prev) => prev.filter((_, i) => i !== index))} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{(['name','age','jk','rm','room','kamar','dpjp','dx'] as (keyof ParsedPatientRaw)[]).map((field) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{([
+              'name', 'jk', 'dob', 'age', 'rm', 'room', 'kamar', 'dpjp', 'dx'
+            ] as (keyof ParsedPatientRaw)[]).map((field) => {
               const corrKey = `${index}:${field}`;
               const originalAiName = correctedNames[corrKey];
+              const fieldLabel = field === 'dpjp'
+                ? 'DOKTER PERAN'
+                : field === 'dob'
+                ? 'TGL LAHIR (DOB)'
+                : field.toUpperCase();
               return <label key={field} className="text-xs font-semibold text-slate-600">
-                {field === 'dpjp' ? 'DOKTER PERAN' : field.toUpperCase()}
-                <input value={String(p[field] || '')} onChange={(e) => updateItem(index, field, e.target.value)} className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${originalAiName ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300'}`} />
+                {fieldLabel}
+                <input value={String(p[field] || '')} onChange={(e) => updateItem(index, field, e.target.value)} placeholder={field === 'dob' ? 'YYYY-MM-DD' : ''} className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${originalAiName ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300'}`} />
                 {originalAiName && (
                   <span className="mt-1 flex items-center gap-1 text-[10px] text-emerald-700 font-bold">
                     <span>✓ Dikoreksi otomatis dari:</span>

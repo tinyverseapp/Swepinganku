@@ -77,14 +77,15 @@ ${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : '
 ATURAN STRUKTUR DATA (SANGAT KETAT):
 1. name: Nama pasien. Pertahankan sebutan jika ada (Tn, Ny, An, By, dsb. Contoh: "Tn. Sutrisno", "Ny. Siti Aminah", "An. Rafa", "By. Ny. Rahma"). Jika pasien berusia kurang dari 1 bulan gunakan "By." (misal: "By. Dania").
 2. age: Usia pasien dalam format singkat (misal: "45 th", "8 bln", "2 th", "60"). Jika tidak tertera, gunakan string kosong "".
-3. jk: Jenis kelamin pasien: 'L' (Laki-laki), 'P' (Perempuan), atau string kosong "".
-4. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918"). Jika tidak ada, gunakan string kosong "".
-5. room: Nama ruangan / bangsal sesuai teks atau kecocokan terdekat.
-6. kamar: Nomor kamar atau nomor bed (misal: "Bed 3", "2A", "Bed 1", "3", "HCU-2").
-7. dpjp: Nama dokter konsulen / yang merawat sesuai peran.
-8. doctorRole: "DPJP", "RABER", "KONSUL", atau "" bila belum pasti.
-9. supervisingDpjp: Nama DPJP utama bila doctorRole adalah RABER atau KONSUL, jika DPJP kosongkan "".
-10. dx: Diagnosis kerja / klinis pasien secara ringkas dan medis. HANYA diagnosis saja! JANGAN menyertakan pre/post op terpisah, tindakan operasi, atau TTV.
+3. dob: Tanggal lahir pasien (DOB) dalam format YYYY-MM-DD jika ada (misal: "2023-05-12", "12/05/2020" dikonversi ke YYYY-MM-DD). Jika tidak ada, gunakan string kosong "".
+4. jk: Jenis kelamin pasien: 'L' (Laki-laki), 'P' (Perempuan), atau string kosong "".
+5. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918"). Jika tidak ada, gunakan string kosong "".
+6. room: Nama ruangan / bangsal sesuai teks atau kecocokan terdekat.
+7. kamar: Nomor kamar atau nomor bed (misal: "Bed 3", "2A", "Bed 1", "3", "HCU-2").
+8. dpjp: Nama dokter konsulen / yang merawat sesuai peran.
+9. doctorRole: "DPJP", "RABER", "KONSUL", atau "" bila belum pasti.
+10. supervisingDpjp: Nama DPJP utama bila doctorRole adalah RABER atau KONSUL, jika DPJP kosongkan "".
+11. dx: Diagnosis kerja / klinis pasien secara ringkas dan medis. HANYA diagnosis saja! JANGAN menyertakan pre/post op terpisah, tindakan operasi, atau TTV.
 
 TEKS CATATAN MENTAH:
 """
@@ -114,6 +115,7 @@ ${text}
                   properties: {
                     name: { type: Type.STRING, description: "Nama pasien" },
                     age: { type: Type.STRING, description: "Usia pasien" },
+                    dob: { type: Type.STRING, description: "Tanggal lahir pasien format YYYY-MM-DD jika diketahui, jika tidak kosongkan" },
                     jk: { type: Type.STRING, description: "Jenis kelamin: 'L', 'P', atau ''" },
                     rm: { type: Type.STRING, description: "Nomor Rekam Medis" },
                     room: { type: Type.STRING, description: "Nama Ruangan / Bangsal" },

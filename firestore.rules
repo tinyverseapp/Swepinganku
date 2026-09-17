@@ -12,6 +12,7 @@ service cloud.firestore {
         && data.id is string && data.id.size() > 0 && data.id.size() <= 128
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
         && (data.jk == 'L' || data.jk == 'P' || data.jk == '')
+        && (!('dob' in data) || (data.dob is string && data.dob.size() <= 50))
         && (!('age' in data) || (data.age is string && data.age.size() <= 50))
         && data.rm is string && data.rm.size() <= 50
         && data.room is string && data.room.size() <= 100

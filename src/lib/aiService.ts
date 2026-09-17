@@ -8,6 +8,7 @@ const ADMIN_EMAIL = 'm.hafidzuddin.s@gmail.com';
 export interface ParsedPatientRaw {
   name: string;
   age: string;
+  dob?: string;
   jk: 'L' | 'P' | '';
   rm: string;
   room: string;

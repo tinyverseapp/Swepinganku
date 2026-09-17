@@ -10,6 +10,7 @@ import {
   parseAgeInYears,
   formatPatientNameWithHonorific
 } from '../data/constants';
+import { calculateAgeFromDob } from '../utils/storage';
 import { X, UserPlus, Save, Sparkles } from 'lucide-react';
 
 interface PatientModalProps {
@@ -44,6 +45,7 @@ export function PatientModal({
   const [kamar, setKamar] = useState('');
   const [name, setName] = useState('');
   const [jk, setJk] = useState<'L' | 'P' | ''>('');
+  const [dob, setDob] = useState('');
   const [age, setAge] = useState('');
   const [rm, setRm] = useState('');
   const [dx, setDx] = useState('');
@@ -78,6 +80,7 @@ export function PatientModal({
       setKamar(initialData.kamar || '');
       setName(initialData.name || '');
       setJk(initialData.jk || '');
+      setDob(initialData.dob || '');
       setAge(initialData.age || '');
       setRm(initialData.rm || '');
       setDx(initialData.dx || '');
@@ -91,6 +94,7 @@ export function PatientModal({
       setKamar('');
       setName('');
       setJk('');
+      setDob('');
       setAge('');
       setRm('');
       setDx('');
@@ -142,6 +146,7 @@ export function PatientModal({
       kamar: finalKamar,
       name: formattedName,
       jk,
+      dob: dob.trim() || undefined,
       age: age.trim(),
       rm: rm.trim(),
       dx: dx.trim(),
@@ -250,7 +255,49 @@ export function PatientModal({
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Usia Pasien</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700">Tanggal Lahir (DOB)</label>
+                {dob && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const calculated = calculateAgeFromDob(dob, activeDate || undefined);
+                      if (calculated) setAge(calculated);
+                    }}
+                    className="text-[10.5px] text-teal-700 font-semibold hover:underline cursor-pointer"
+                    title="Hitung ulang usia berdasarkan tanggal lahir"
+                  >
+                    Hitung usia ↻
+                  </button>
+                )}
+              </div>
+              <input
+                type="date"
+                value={dob}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDob(val);
+                  if (val) {
+                    const calculated = calculateAgeFromDob(val, activeDate || undefined);
+                    if (calculated && (!age || age.trim() === '')) {
+                      setAge(calculated);
+                    }
+                  }
+                }}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Tanggal lahir pasien (ditulis di rekapan mingguan &amp; CSV sebagai kolom DOB).</p>
+            </div>
+
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700">Usia Pasien</label>
+                {dob && (
+                  <span className="text-[10.5px] text-slate-500">
+                    DOB: <span className="font-mono font-medium text-slate-700">{dob}</span>
+                  </span>
+                )}
+              </div>
               <input type="text" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Contoh: 15 hari / 8 bln / 14 th / 45 th" className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
               <p className="text-[10px] text-slate-500 mt-1">
                 {autoHonorific ? (
@@ -262,7 +309,7 @@ export function PatientModal({
                     <span className="text-teal-700 font-medium">✓ Usia dewasa ({jk === 'L' ? 'L' : 'P'}) → Otomatis <b>{autoHonorific}</b></span>
                   )
                 ) : (
-                  <span>Ketik usia untuk deteksi otomatis (misal: 10 hr → By., 14 th → An., 45 th → Tn./Ny.)</span>
+                  <span>Ketik usia atau pilih Tanggal Lahir (DOB) untuk deteksi otomatis (misal: 10 hr → By., 14 th → An., 45 th → Tn./Ny.)</span>
                 )}
               </p>
             </div>
