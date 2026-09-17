@@ -247,5 +247,42 @@ export function formatPatientNameWithHonorific(name?: string, ageStr?: string, j
 }
 export function formatRoomDisplay(room?: string,kamar?: string): string { const r=(room||'').trim(); const k=(kamar||'').trim(); if(!r&&!k)return '-'; if(!k)return r; if(!r)return k; return `${r} ${k}`; }
 export const SAMPLE_PATIENTS: Patient[] = [];
-export const DEFAULT_TEAM_CODES: Record<string,string> = {'Bedah Digestif & Umum':'DIGESTIF','Bedah Anak':'BEDAH-ANAK','Urologi':'UROLOGI','Ortopedi':'ORTOPEDI','Bedah Saraf':'BEDAH-SARAF','BTKV':'BTKV','Bedah Plastik':'BEDAH-PLASTIK','Bedah Onkologi':'ONKOLOGI'};
-export function getDefaultTeamCode(division:string):string{return DEFAULT_TEAM_CODES[division]||division.replace(/[^a-zA-Z0-9]/g,'').toUpperCase().slice(0,8);}
+
+/** Prefix identitas divisi bedah untuk penomoran PIN tim */
+export const DIVISION_PIN_PREFIXES: Record<string, string> = {
+  'Bedah Digestif & Umum': 'DIG',
+  'Bedah Anak': 'BAN',
+  'Urologi': 'URO',
+  'Ortopedi': 'ORT',
+  'Bedah Saraf': 'BSF',
+  'BTKV': 'BTKV',
+  'Bedah Plastik': 'BPL',
+  'Bedah Onkologi': 'ONK'
+};
+
+export function getDivisionPinPrefix(division?: string | null): string {
+  if (!division) return 'BED';
+  if (DIVISION_PIN_PREFIXES[division]) return DIVISION_PIN_PREFIXES[division];
+  const lower = division.toLowerCase();
+  if (lower.includes('digestif')) return 'DIG';
+  if (lower.includes('anak')) return 'BAN';
+  if (lower.includes('uro')) return 'URO';
+  if (lower.includes('orto')) return 'ORT';
+  if (lower.includes('saraf')) return 'BSF';
+  if (lower.includes('tkv')) return 'BTKV';
+  if (lower.includes('plastik')) return 'BPL';
+  if (lower.includes('onko')) return 'ONK';
+  return division.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'BED';
+}
+
+/** Menghasilkan PIN unik berbasis identitas divisi bedah, misalnya URO-123, DIG-742, ORT-309 */
+export function generateDivisionPin(division?: string | null): string {
+  const prefix = getDivisionPinPrefix(division);
+  const num = Math.floor(100 + Math.random() * 900);
+  return `${prefix}-${num}`;
+}
+
+export function getDefaultTeamCode(division: string): string {
+  return generateDivisionPin(division);
+}
+export const DEFAULT_TEAM_CODES: Record<string, string> = DIVISION_PIN_PREFIXES;

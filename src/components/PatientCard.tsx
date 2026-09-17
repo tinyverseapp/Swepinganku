@@ -1,5 +1,6 @@
 import { Patient } from '../types';
 import { isBedRoom, formatKamarOrBed } from '../data/constants';
+import { formatDateDMY } from '../utils/storage';
 import { Edit2, Trash2, Stethoscope, Share2, CalendarDays, Building2 } from 'lucide-react';
 
 interface PatientCardProps {
@@ -96,14 +97,14 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onTog
                 </span>
                 {patient.weeklyStatus === 'baru' && (patient.admissionDate || patient.date) && (
                   <span className="font-mono text-[8.5px] opacity-80">
-                    ({patient.admissionDate || patient.date})
+                    ({formatDateDMY(patient.admissionDate || patient.date)})
                   </span>
                 )}
               </button>
               <span className={`font-bold rounded-full ${isCompact ? 'text-[9px] px-1.5 py-0.2' : 'text-[10px] px-2 py-0.5'} ${isMale ? 'bg-sky-100 text-sky-800' : 'bg-rose-100 text-rose-800'}`}>{patient.jk} · {patient.age || 'Usia -'}</span>
               {patient.dob && (
                 <span className={`font-mono font-medium text-slate-600 bg-slate-100 rounded-md ${isCompact ? 'text-[9px] px-1.5 py-0.2' : 'text-[11px] px-2 py-0.5'}`} title="Tanggal Lahir (DOB)">
-                  DOB: {patient.dob}
+                  DOB: {formatDateDMY(patient.dob)}
                 </span>
               )}
               <span className={`font-mono font-semibold text-slate-600 bg-slate-100 rounded-md ${isCompact ? 'text-[10px] px-1.5 py-0.2' : 'text-xs px-2 py-0.5'}`}>RM: {patient.rm}</span>

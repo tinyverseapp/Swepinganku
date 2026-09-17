@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DivisionTeam } from '../types';
-import { DIVISIONS, getDefaultTeamCode } from '../data/constants';
+import { DIVISIONS, generateDivisionPin } from '../data/constants';
 import { saveJoinedTeam, loadJoinedTeams } from '../utils/teamRegistry';
 import { today } from '../utils/storage';
 import { getCurrentWeekRange, getTeam, createOrUpdateTeam } from '../lib/teamService';
@@ -44,9 +44,21 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
   if (!isOpen) return null;
   const week = getCurrentWeekRange(weekDate);
 
-  const goMode = (next: 'create' | 'join') => { setMode(next); setError(''); setJoinPreview(null); setTeamCodeInput(next === 'create' ? getDefaultTeamCode(selectedDivision) : ''); setTeamNameInput(next === 'create' ? `Tim ${selectedDivision}` : ''); };
-  const handleDivisionChange = (division: string) => { setSelectedDivision(division); setTeamCodeInput(getDefaultTeamCode(division)); setTeamNameInput(`Tim ${division}`); };
-  const handleRandomPin = () => { const prefix = selectedDivision.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase(); setTeamCodeInput(`${prefix}-${Math.floor(100 + Math.random() * 900)}`); };
+  const goMode = (next: 'create' | 'join') => {
+    setMode(next);
+    setError('');
+    setJoinPreview(null);
+    setTeamCodeInput(next === 'create' ? generateDivisionPin(selectedDivision) : '');
+    setTeamNameInput(next === 'create' ? `Tim ${selectedDivision}` : '');
+  };
+  const handleDivisionChange = (division: string) => {
+    setSelectedDivision(division);
+    setTeamCodeInput(generateDivisionPin(division));
+    setTeamNameInput(`Tim ${division}`);
+  };
+  const handleRandomPin = () => {
+    setTeamCodeInput(generateDivisionPin(selectedDivision));
+  };
 
   const handleJoinPreview = async () => {
     const cleanCode = teamCodeInput.trim().toUpperCase();
@@ -75,10 +87,19 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
         if (duplicate && duplicate.teamCode !== existing.teamCode) throw new Error(`Divisi ${existing.division} sudah dipakai akun ini pada pekan ${duplicate.weekStart}. Pekan berikutnya harus memakai divisi berbeda.`);
         finalTeam = { ...existing, teamCode: cleanCode, members: Array.from(new Set([...(existing.members || []), cleanMember])) };
       } else {
-        const cleanCode = teamCodeInput.trim().toUpperCase() || getDefaultTeamCode(selectedDivision);
+        let cleanCode = teamCodeInput.trim().toUpperCase() || generateDivisionPin(selectedDivision);
         const cleanName = teamNameInput.trim() || `Tim ${selectedDivision}`;
-        const existing = await getTeam(cleanCode);
-        if (existing) throw new Error(`PIN ${cleanCode} sudah digunakan. Gunakan PIN lain atau pilih menu Gabung Tim.`);
+        let existing = await getTeam(cleanCode);
+        if (existing && !teamCodeInput.trim()) {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            cleanCode = generateDivisionPin(selectedDivision);
+            existing = await getTeam(cleanCode);
+            if (!existing) break;
+          }
+        }
+        if (existing) {
+          throw new Error(`PIN ${cleanCode} sudah digunakan. Klik tombol "Acak PIN" untuk mendapatkan PIN baru, atau pilih menu "Gabung ke Tim".`);
+        }
         finalTeam = { teamCode: cleanCode, division: selectedDivision, teamName: cleanName, members: [cleanMember], weekStart: week.weekStart, weekEnd: week.weekEnd, createdAt: new Date().toISOString(), lastUpdated: new Date().toISOString() };
         finalTeam = await createOrUpdateTeam(finalTeam, true);
       }
@@ -149,11 +170,23 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
                     </select>
                   </div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5"><CalendarDays className="w-4 h-4 text-teal-600" />Tanggal pekan divisi</label><input required type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" /><p className="text-[11px] text-slate-500 mt-1.5">Tanggal akan otomatis dibulatkan ke <b>Senin–Minggu</b>: {week.weekStart} s/d {week.weekEnd}.</p></div>
-                  <div><div className="flex items-center justify-between mb-1.5"><label className="text-xs font-bold text-slate-700">Kode Tim / PIN</label><button type="button" onClick={handleRandomPin} className="text-[11px] font-semibold text-teal-700 flex items-center gap-1 cursor-pointer"><RefreshCw className="w-3 h-3" />Acak PIN</button></div><div className="relative"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input required value={teamCodeInput} onChange={(e) => setTeamCodeInput(e.target.value.toUpperCase())} placeholder="Contoh: URO-101" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" /></div></div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700">Kode Tim / PIN</label>
+                      <button type="button" onClick={handleRandomPin} className="text-[11px] font-semibold text-teal-700 flex items-center gap-1 cursor-pointer hover:text-teal-800">
+                        <RefreshCw className="w-3 h-3" />Acak PIN
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input required value={teamCodeInput} onChange={(e) => setTeamCodeInput(e.target.value.toUpperCase())} placeholder="Contoh: URO-123" className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 mt-1">PIN otomatis mencantumkan identitas divisi (misal <b>URO-123</b>, <b>DIG-456</b>). Klik <b>Acak PIN</b> untuk kombinasi lain.</p>
+                  </div>
                   <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Tim</label><input required value={teamNameInput} onChange={(e) => setTeamNameInput(e.target.value)} placeholder={`Tim ${selectedDivision}`} className="w-full min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" /><p className="text-[10px] text-slate-400 mt-1">Nama ini menjadi nama bersama untuk semua anggota tim.</p></div>
                 </> : <>
                   <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5"><div className="text-xs font-extrabold text-emerald-900">Gabung dengan PIN</div><p className="text-[11px] text-emerald-700 mt-0.5">Tidak perlu memilih divisi atau tanggal. Semuanya mengikuti tim yang sudah dibuat.</p></div>
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Kode Tim / PIN</label><div className="flex gap-2"><input required value={teamCodeInput} onChange={(e) => { setTeamCodeInput(e.target.value.toUpperCase()); setJoinPreview(null); }} placeholder="Contoh: URO-101" className="flex-1 min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" /><button type="button" onClick={handleJoinPreview} disabled={busy} className="px-4 min-h-11 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-60 cursor-pointer">{busy ? 'Mencari...' : 'Cari Tim'}</button></div></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Kode Tim / PIN</label><div className="flex gap-2"><input required value={teamCodeInput} onChange={(e) => { setTeamCodeInput(e.target.value.toUpperCase()); setJoinPreview(null); }} placeholder="Contoh: URO-123" className="flex-1 min-h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-sm font-mono font-bold tracking-wider focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20" /><button type="button" onClick={handleJoinPreview} disabled={busy} className="px-4 min-h-11 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-60 cursor-pointer">{busy ? 'Mencari...' : 'Cari Tim'}</button></div></div>
                   {joinPreview && (() => {
                     const previewTheme = getDivisionColorTheme(joinPreview.division);
                     return (

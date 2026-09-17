@@ -4,7 +4,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { WeeklyRow, Patient } from '../types';
 import { db } from '../lib/firebase';
 import { formatKamarOrBed, normalizeRoomName, formatPatientNameWithHonorific, formatRoomDisplay } from '../data/constants';
-import { exportWeeklyCSV, exportPatientsCSV, parseDateSafely, formatDateIso, formatDpjpRaberCo } from '../utils/storage';
+import { exportWeeklyCSV, exportPatientsCSV, parseDateSafely, formatDateIso, formatDateDMY, formatDpjpRaberCo } from '../utils/storage';
 import { fetchPatientsForDateRange, seedWeeklyHistory, subscribeToWeeklyHistory, WeeklyHistoryRecord } from '../lib/firestoreService';
 
 interface WeeklyModalProps { isOpen: boolean; currentDate: string; division: string; teamCode?: string; onClose: () => void; }
@@ -250,18 +250,19 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
               <tbody>
                 {detailedPatients.map((p, i) => {
                   const row = rows.find((r) => rmKey(r.rm) === rmKey(p.rm));
-                  const tglMasuk = row?.weeklyStatus === 'baru' && row.admissionDate
-                    ? formatDateIso(parseDateSafely(row.admissionDate))
-                    : (p.admissionDate ? formatDateIso(parseDateSafely(p.admissionDate)) : (row?.weeklyStatus === 'baru' ? (p.date || '-') : '-'));
+                  const rawAdmission = row?.weeklyStatus === 'baru' && row.admissionDate
+                    ? row.admissionDate
+                    : (p.admissionDate ? p.admissionDate : (row?.weeklyStatus === 'baru' ? p.date : ''));
+                  const tglMasuk = rawAdmission ? formatDateDMY(rawAdmission) : '-';
                   return (
                     <tr key={`${p.rm}-${i}`} className="border-b hover:bg-emerald-50/40 align-top">
                       <td className="p-2.5 text-center text-slate-500 font-medium">{i + 1}</td>
                       <td className="p-2.5 font-mono whitespace-nowrap font-semibold">{p.rm}</td>
                       <td className="p-2.5 font-medium max-w-[180px] break-words">{p.name}</td>
                       <td className="p-2.5 font-bold text-center">{p.jk || '-'}</td>
-                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{p.dob || '-'}</td>
+                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{p.dob ? formatDateDMY(p.dob) : '-'}</td>
                       <td className="p-2.5 whitespace-nowrap text-center">{p.age || '-'}</td>
-                      <td className="p-2.5 whitespace-nowrap text-center">{tglMasuk}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center font-mono">{tglMasuk}</td>
                       <td className="p-2.5 min-w-[420px] max-w-[620px] leading-relaxed break-words text-slate-800">{p.dx || '-'}</td>
                       <td className="p-2.5 min-w-[180px] max-w-[240px] leading-snug break-words">{formatDpjpRaberCo(p)}</td>
                       <td className="p-2.5 whitespace-nowrap">{formatRoomDisplay(p.room, p.kamar)}</td>
@@ -303,7 +304,7 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
               <tbody>
                 {rows.map((r, i) => {
                   const tglMasuk = r.weeklyStatus === 'baru' && r.admissionDate
-                    ? formatDateIso(parseDateSafely(r.admissionDate))
+                    ? formatDateDMY(r.admissionDate)
                     : '-';
                   return (
                     <tr key={r.rm} className="border-b hover:bg-slate-50 align-top">
@@ -311,9 +312,9 @@ export function WeeklyModal({ isOpen, currentDate, division, teamCode, onClose }
                       <td className="p-2.5 font-mono font-semibold whitespace-nowrap">{r.rm}</td>
                       <td className="p-2.5 font-bold max-w-[180px] break-words">{r.name}</td>
                       <td className="p-2.5 font-bold text-center">{r.jk || '-'}</td>
-                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{r.dob || '-'}</td>
+                      <td className="p-2.5 font-mono whitespace-nowrap text-center">{r.dob ? formatDateDMY(r.dob) : '-'}</td>
                       <td className="p-2.5 whitespace-nowrap text-center">{r.age}</td>
-                      <td className="p-2.5 whitespace-nowrap text-center">{tglMasuk}</td>
+                      <td className="p-2.5 whitespace-nowrap text-center font-mono">{tglMasuk}</td>
                       <td className="p-2.5 min-w-[420px] max-w-[620px] leading-relaxed break-words text-slate-800">{r.dx}</td>
                       <td className="p-2.5 min-w-[180px] max-w-[240px] leading-snug break-words">{r.dpjp}</td>
                       <td className="p-2.5 whitespace-nowrap">{r.lastRoom} {r.lastKamar ? `/ ${formatKamarOrBed(r.lastRoom, r.lastKamar)}` : ''}</td>

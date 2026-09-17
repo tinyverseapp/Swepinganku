@@ -4,7 +4,7 @@ import { AiSparkleIcon } from './AiSparkleIcon';
 import { Patient } from '../types';
 import { parsePatientsWithAi, ParsedPatientRaw } from '../lib/aiService';
 import { MASTER_ROOMS, PEDIATRIC_CONSULTANTS, normalizeRoomName, getAllKnownDoctors, fuzzyMatchDoctor } from '../data/constants';
-import { formatIndonesianDate } from '../utils/storage';
+import { formatIndonesianDate, calculateAgeFromDob } from '../utils/storage';
 
 interface AiImportModalProps {
   isOpen: boolean; onClose: () => void; division: string; date: string; teamCode?: string;
@@ -60,7 +60,12 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
             }
           }
 
-          return { ...p, dpjp, supervisingDpjp };
+          let patientAge = p.age;
+          if (p.dob && (!patientAge || !patientAge.trim())) {
+            patientAge = calculateAgeFromDob(p.dob, date) || patientAge;
+          }
+
+          return { ...p, age: patientAge, dpjp, supervisingDpjp };
         });
 
         setCorrectedNames(corrections);
@@ -75,7 +80,18 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
     catch { setError('Izin akses clipboard ditolak oleh browser. Silakan tempel (Ctrl+V) langsung ke kolom teks.'); }
   };
   const handleClear = () => { setInputText(''); setParsedList([]); setHasParsed(false); setError(null); setCorrectedNames({}); };
-  const updateItem = (index: number, field: keyof ParsedPatientRaw, value: string) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
+  const updateItem = (index: number, field: keyof ParsedPatientRaw, value: string) =>
+    setParsedList((prev) =>
+      prev.map((p, i) => {
+        if (i !== index) return p;
+        const updated = { ...p, [field]: value };
+        if (field === 'dob' && value.trim()) {
+          const autoAge = calculateAgeFromDob(value.trim(), date);
+          if (autoAge) updated.age = autoAge;
+        }
+        return updated;
+      })
+    );
   const updateRole = (index: number, role: DoctorRole) => setParsedList((prev) => prev.map((p, i) => i === index ? { ...p, doctorRole: role, supervisingDpjp: role === 'DPJP' ? undefined : p.supervisingDpjp } : p));
   const addItem = () => setParsedList((prev) => [...prev, { name: '', age: '', dob: '', jk: '', rm: '', room: '', kamar: '', dpjp: '', doctorRole: undefined, supervisingDpjp: undefined, dx: '' }]);
 

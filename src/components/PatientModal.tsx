@@ -10,7 +10,7 @@ import {
   parseAgeInYears,
   formatPatientNameWithHonorific
 } from '../data/constants';
-import { calculateAgeFromDob } from '../utils/storage';
+import { calculateAgeFromDob, formatDateDMY } from '../utils/storage';
 import { X, UserPlus, Save, Sparkles } from 'lucide-react';
 
 interface PatientModalProps {
@@ -80,8 +80,13 @@ export function PatientModal({
       setKamar(initialData.kamar || '');
       setName(initialData.name || '');
       setJk(initialData.jk || '');
-      setDob(initialData.dob || '');
-      setAge(initialData.age || '');
+      const patientDob = initialData.dob || '';
+      setDob(patientDob);
+      let patientAge = initialData.age || '';
+      if (patientDob && (!patientAge || patientAge.trim() === '')) {
+        patientAge = calculateAgeFromDob(patientDob, activeDate || undefined) || '';
+      }
+      setAge(patientAge);
       setRm(initialData.rm || '');
       setDx(initialData.dx || '');
     } else {
@@ -110,6 +115,16 @@ export function PatientModal({
   const isCurrentBed = isBedRoom(currentRoomName);
   const needsSupervisingDpjp = doctorRole === 'RABER' || doctorRole === 'KONSUL';
   const supervisingDpjpOptions = Array.from(new Set([...(existingDpjps || []), ...PEDIATRIC_CONSULTANTS]));
+
+  const handleDobChange = (val: string) => {
+    setDob(val);
+    if (val && val.trim()) {
+      const calculated = calculateAgeFromDob(val.trim(), activeDate || undefined);
+      if (calculated) {
+        setAge(calculated);
+      }
+    }
+  };
 
   const handleRoomSelectChange = (val: string) => {
     if (val === '__CUSTOM__') {
@@ -258,35 +273,18 @@ export function PatientModal({
               <div className="flex items-center justify-between mb-1">
                 <label className="block font-bold text-slate-700">Tanggal Lahir (DOB)</label>
                 {dob && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const calculated = calculateAgeFromDob(dob, activeDate || undefined);
-                      if (calculated) setAge(calculated);
-                    }}
-                    className="text-[10.5px] text-teal-700 font-semibold hover:underline cursor-pointer"
-                    title="Hitung ulang usia berdasarkan tanggal lahir"
-                  >
-                    Hitung usia ↻
-                  </button>
+                  <span className="text-[10.5px] text-teal-700 font-semibold flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/70">
+                    ✓ Usia otomatis terhitung
+                  </span>
                 )}
               </div>
               <input
                 type="date"
                 value={dob}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setDob(val);
-                  if (val) {
-                    const calculated = calculateAgeFromDob(val, activeDate || undefined);
-                    if (calculated && (!age || age.trim() === '')) {
-                      setAge(calculated);
-                    }
-                  }
-                }}
+                onChange={(e) => handleDobChange(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Tanggal lahir pasien (ditulis di rekapan mingguan &amp; CSV sebagai kolom DOB).</p>
+              <p className="text-[10px] text-slate-500 mt-1">Tanggal lahir pasien (usia otomatis terhitung langsung saat tanggal dipilih).</p>
             </div>
 
             <div className="sm:col-span-2">
@@ -294,7 +292,7 @@ export function PatientModal({
                 <label className="block font-bold text-slate-700">Usia Pasien</label>
                 {dob && (
                   <span className="text-[10.5px] text-slate-500">
-                    DOB: <span className="font-mono font-medium text-slate-700">{dob}</span>
+                    DOB: <span className="font-mono font-medium text-slate-700">{formatDateDMY(dob)}</span>
                   </span>
                 )}
               </div>
