@@ -1,13 +1,18 @@
 import {
   collection,
+  collectionGroup,
   doc,
   deleteDoc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
+  query,
   setDoc,
   Unsubscribe,
+  where,
 } from 'firebase/firestore';
-import { db } from './firebase';\nimport { getTeam } from './teamService';\nimport { DivisionTeam } from '../types';
+import { db } from './firebase';
+import { getTeam } from './teamService';\nimport { DivisionTeam } from '../types';
 
 export interface TeamMember {
   uid: string;
