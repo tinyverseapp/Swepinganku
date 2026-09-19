@@ -12,7 +12,8 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getTeam } from './teamService';\nimport { DivisionTeam } from '../types';
+import { getTeam } from './teamService';
+import { DivisionTeam } from '../types';
 
 export interface TeamMember {
   uid: string;
