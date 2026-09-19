@@ -7,7 +7,7 @@ import {
   setDoc,
   Unsubscribe,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from './firebase';\nimport { getTeam } from './teamService';\nimport { DivisionTeam } from '../types';
 
 export interface TeamMember {
   uid: string;
@@ -75,4 +75,28 @@ export function subscribeToTeamMembers(
       onError?.(error);
     },
   );
+}
+
+
+/**
+ * Rebuild the account's joined-team cache from Firebase.
+ * The cache is device-local, while these membership documents are the
+ * account-level source of truth shared across devices.
+ */
+export async function syncJoinedTeamsFromFirebase(uid: string): Promise<DivisionTeam[]> {
+  if (!uid) return [];
+  const membershipSnap = await getDocs(
+    query(collectionGroup(db, 'members'), where('uid', '==', uid)),
+  );
+
+  const teamCodes = Array.from(new Set(
+    membershipSnap.docs
+      .map((item) => item.ref.parent.parent?.id?.trim().toUpperCase() || '')
+      .filter(Boolean),
+  ));
+
+  const teams = (await Promise.all(teamCodes.map((code) => getTeam(code))))
+    .filter((team): team is DivisionTeam => Boolean(team?.teamCode));
+
+  return teams;
 }
