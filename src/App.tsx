@@ -17,7 +17,7 @@ import {
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
 import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
-import { auth } from './lib/firebase';
+import { auth } from './lib/firebase';\nimport { syncJoinedTeamsFromFirebase } from './lib/teamMembersService';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
@@ -76,14 +76,43 @@ export default function App() {
 
   useEffect(() => {
     cleanRemovedDoctorsFromStorage();
-    if (auth.currentUser) {
-      migrateDoctorNamesInFirestore().catch(() => {});
-    }
-    const unsub = onAuthStateChanged(auth, (user) => {
+
+    const syncAccountTeams = async (user: typeof auth.currentUser) => {
+      if (!user) return;
+      try {
+        const teams = await syncJoinedTeamsFromFirebase(user.uid);
+        const current = getSavedActiveTeam();
+        const next = current && teams.some((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase())
+          ? teams.find((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase()) || current
+          : teams[teams.length - 1] || null;
+
+        if (next) {
+          saveJoinedTeam(next);
+          saveCurrentTeam(next);
+          setActiveTeam(next);
+          setDivision(next.division || '');
+          setPatients(loadPatients(date, next.division, next.teamCode));
+        } else {
+          const empty = EMPTY_TEAM;
+          localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(empty));
+          setActiveTeam(empty);
+          setDivision('');
+          setPatients([]);
+        }
+      } catch (error) {
+        console.error('[Firebase] gagal sinkronisasi tim akun:', error);
+      }
+    };
+
+    const handleUser = (user: typeof auth.currentUser) => {
       if (user) {
         migrateDoctorNamesInFirestore().catch(() => {});
+        syncAccountTeams(user).catch(() => {});
       }
-    });
+    };
+
+    handleUser(auth.currentUser);
+    const unsub = onAuthStateChanged(auth, handleUser);
     return () => unsub();
   }, []);
 
