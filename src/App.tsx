@@ -17,7 +17,8 @@ import {
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
 import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
-import { auth } from './lib/firebase';\nimport { syncJoinedTeamsFromFirebase } from './lib/teamMembersService';
+import { auth } from './lib/firebase';
+import { syncJoinedTeamsFromFirebase } from './lib/teamMembersService';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
