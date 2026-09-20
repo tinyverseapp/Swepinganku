@@ -16,11 +16,11 @@ import {
   getDayDifference,
   incrementPodInDiagnosis
 } from './utils/storage';
-import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
+import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam, removeJoinedTeam } from './utils/teamRegistry';
 import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
 import { auth } from './lib/firebase';
-import { syncJoinedTeamsFromFirebase, syncUserTeamToFirebase } from './lib/teamMembersService';
+import { syncJoinedTeamsFromFirebase, syncUserTeamToFirebase, removeUserTeamFromFirebase } from './lib/teamMembersService';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
@@ -401,6 +401,55 @@ export default function App() {
     if (carryOverFromYesterday) { const result = handoverYesterdayPatients(date, newTeam.division, true); const afterHandover = loadPatients(date, newTeam.division, newTeam.teamCode); const withFirebaseMeta = afterHandover.map((p) => ({ ...p, teamCode: newTeam.teamCode, date, division: newTeam.division })); setPatients(withFirebaseMeta); if (newTeam.teamCode && withFirebaseMeta.length) savePatientsBatch(newTeam.teamCode, date, withFirebaseMeta).catch((error) => showToast(`Firebase gagal menyimpan operan: ${error.message}`)); showToast(`Terhubung ke Tim ${newTeam.teamName || newTeam.teamCode}. Dioper ${result.addedCount} pasien.`); } else showToast(`Terhubung ke Tim ${newTeam.teamName || newTeam.teamCode}.`);
   };
 
+  const handleLeaveTeam = async (teamCodeToLeave: string) => {
+    const cleanCode = teamCodeToLeave?.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    try {
+      // 1. Sinkronisasi hapus keanggotaan di Firebase
+      if (auth.currentUser?.uid) {
+        const remainingJoined = loadJoinedTeams().filter(
+          (t) => t.teamCode.trim().toUpperCase() !== cleanCode
+        );
+        const nextActive = remainingJoined[remainingJoined.length - 1]?.teamCode || '';
+        await removeUserTeamFromFirebase(
+          auth.currentUser.uid,
+          cleanCode,
+          nextActive,
+          auth.currentUser.displayName || koasName
+        );
+      }
+
+      // 2. Hapus dari riwayat tim lokal di perangkat
+      const remainingTeams = removeJoinedTeam(cleanCode);
+
+      // 3. Jika tim yang ditinggalkan adalah tim aktif saat ini, beralih ke tim lain atau state kosong
+      if (activeTeam.teamCode?.trim().toUpperCase() === cleanCode) {
+        const nextTeam = remainingTeams[remainingTeams.length - 1] || null;
+        if (nextTeam) {
+          saveCurrentTeam(nextTeam);
+          setActiveTeam(nextTeam);
+          setDivision(nextTeam.division || '');
+          const refreshed = loadPatients(date, nextTeam.division, nextTeam.teamCode);
+          setPatients(refreshed);
+          showToast(`Berhasil keluar dari tim ${cleanCode}. Beralih ke ${nextTeam.teamName || nextTeam.division}.`);
+        } else {
+          const empty = EMPTY_TEAM;
+          localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(empty));
+          setActiveTeam(empty);
+          setDivision('');
+          setPatients([]);
+          showToast(`Berhasil keluar dari tim ${cleanCode}. Anda saat ini belum bergabung ke tim.`);
+        }
+      } else {
+        showToast(`Berhasil keluar dari tim ${cleanCode}.`);
+      }
+    } catch (error: any) {
+      console.error('Gagal keluar dari tim:', error);
+      showToast(`Gagal keluar dari tim: ${error?.message || 'terjadi kendala jaringan'}`);
+    }
+  };
+
   // Dokter master divisi aktif adalah satu-satunya dasar klasifikasi dashboard.
   // DPJP dari luar divisi hanya menjadi catatan tambahan.
   const consultants = useMemo(() => (DIVISION_CONSULTANTS[division] || []).filter((c) => !isRemovedDoctor(c)), [division]);
@@ -439,7 +488,7 @@ export default function App() {
     <Topbar koasName={koasName} onUpdateKoasName={handleUpdateKoasName} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} pageMode={pageMode} onPageModeChange={setPageMode} onOpenNextjsModal={() => setIsNextjsModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onOpenSettings={() => setIsSettingsModalOpen(true)} />
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
       {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} onTogglePresence={handleTogglePresenceStatus} onDeletePatient={(patient) => setDeletingPatient(patient)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleOpenHandoverModal} onOpenAiImport={() => setIsAiImportModalOpen(true)} /> : <>
-        <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleOpenHandoverModal} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
+        <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onLeaveTeam={handleLeaveTeam} onHandoverPatients={handleOpenHandoverModal} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
         <WeekDaysBar currentDate={date} division={division} currentPatientCount={patients.length} onSelectDate={handleDateChange} onCopyFromDay={handleCopyFromDay} onDeleteAllDay={(dDate, dName, count) => setDeleteAllDayTarget({ date: dDate, dayName: dName, count })} teamCode={activeTeam.teamCode} />
         <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -561,8 +610,8 @@ export default function App() {
     <HandoverConfirmModal isOpen={isHandoverModalOpen} date={date} division={division} teamCode={activeTeam.teamCode} onClose={() => setIsHandoverModalOpen(false)} onConfirm={handleConfirmHandoverYesterday} />
     <ReportModal isOpen={isReportModalOpen} mode={reportMode} date={date} division={division} koasName={koasName} selectedDpjp={selectedDpjpFilter !== 'all' ? selectedDpjpFilter : consultants[0] || ''} patients={patients} onClose={() => setIsReportModalOpen(false)} />
     <WeeklyModal isOpen={isWeeklyModalOpen} currentDate={date} division={division} teamCode={activeTeam.teamCode} onClose={() => setIsWeeklyModalOpen(false)} />
-    <TeamSwitchModal isOpen={isTeamModalOpen} onClose={() => setIsTeamModalOpen(false)} currentTeam={activeTeam} currentDivision={division} koasName={koasName} onSwitchTeam={handleSwitchTeam} />
+    <TeamSwitchModal isOpen={isTeamModalOpen} onClose={() => setIsTeamModalOpen(false)} currentTeam={activeTeam} currentDivision={division} koasName={koasName} onSwitchTeam={handleSwitchTeam} onLeaveTeam={handleLeaveTeam} />
     <NextjsRepoModal isOpen={isNextjsModalOpen} onClose={() => setIsNextjsModalOpen(false)} />
-    <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} activeTeam={activeTeam} currentDivision={division} onOpenTeamModal={() => setIsTeamModalOpen(true)} />
+    <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} activeTeam={activeTeam} currentDivision={division} onOpenTeamModal={() => setIsTeamModalOpen(true)} onLeaveTeam={handleLeaveTeam} />
   </div>;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, X, KeyRound, ArrowRight, Palette, RotateCcw, Check, Sparkles, Download, ShieldCheck } from 'lucide-react';
+import { Settings, X, KeyRound, ArrowRight, Palette, RotateCcw, Check, Sparkles, Download, ShieldCheck, LogOut, AlertCircle, RefreshCw } from 'lucide-react';
 import { DivisionTeam } from '../types';
 import { DIVISIONS } from '../data/constants';
 import {
@@ -16,6 +16,7 @@ interface SettingsModalProps {
   activeTeam?: DivisionTeam;
   currentDivision?: string;
   onOpenTeamModal?: () => void;
+  onLeaveTeam?: (teamCode: string) => Promise<void> | void;
 }
 
 export function SettingsModal({
@@ -23,15 +24,32 @@ export function SettingsModal({
   onClose,
   activeTeam,
   currentDivision,
-  onOpenTeamModal
+  onOpenTeamModal,
+  onLeaveTeam
 }: SettingsModalProps) {
   const effectiveDivision = activeTeam?.division || currentDivision || DIVISIONS[0] || 'Bedah Digestif & Umum';
   const { colorMap, updateDivisionColor, resetColors } = useDivisionColors(effectiveDivision);
   const [selectedDivForPreview, setSelectedDivForPreview] = useState<string>(effectiveDivision);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [leavingBusy, setLeavingBusy] = useState(false);
 
   if (!isOpen) return null;
 
   const currentTheme = getDivisionColorTheme(selectedDivForPreview, colorMap);
+
+  const handleLeaveActiveTeam = async () => {
+    if (!activeTeam?.teamCode || !onLeaveTeam) return;
+    setLeavingBusy(true);
+    try {
+      await onLeaveTeam(activeTeam.teamCode);
+      setConfirmLeave(false);
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLeavingBusy(false);
+    }
+  };
 
   const handleColorSelect = (division: string, colorKey: string) => {
     updateDivisionColor(division, colorKey);
@@ -89,19 +107,73 @@ export function SettingsModal({
                   </span>
                 </div>
               </div>
-              {onOpenTeamModal && (
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
+                {onOpenTeamModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenTeamModal();
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1 shrink-0 shadow-2xs"
+                  >
+                    <span>Ganti Tim</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+                {onLeaveTeam && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmLeave(true)}
+                    className="px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 cursor-pointer flex items-center gap-1 shrink-0 shadow-2xs"
+                    title="Keluar dari tim ini"
+                  >
+                    <LogOut className="w-3 h-3 text-rose-600" />
+                    <span>Keluar</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Konfirmasi Keluar dari Tim Aktif di Settings */}
+          {confirmLeave && activeTeam?.teamCode && (
+            <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/70 space-y-3 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-rose-900 leading-relaxed">
+                  <span className="font-bold block text-rose-950">Konfirmasi Keluar dari Tim</span>
+                  Yakin ingin keluar dari <strong>{activeTeam.teamName || activeTeam.division}</strong> (PIN: {activeTeam.teamCode})? Akun Anda akan dihapus dari daftar anggota tim. Data pasien tim tetap tersimpan dan aman.
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenTeamModal();
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer flex items-center gap-1 shrink-0 shadow-2xs"
+                  onClick={() => setConfirmLeave(false)}
+                  disabled={leavingBusy}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white rounded-lg cursor-pointer border border-slate-200"
                 >
-                  <span>Ganti Tim</span>
-                  <ArrowRight className="w-3 h-3" />
+                  Batal
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={handleLeaveActiveTeam}
+                  disabled={leavingBusy}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs disabled:opacity-60"
+                >
+                  {leavingBusy ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="w-3 h-3" />
+                      <span>Ya, Keluar Tim</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 

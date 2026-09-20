@@ -120,18 +120,40 @@ export async function syncUserTeamToFirebase(
 /**
  * Removes a team from users/{uid} and teamMembers/{teamCode}.
  */
-export async function removeUserTeamFromFirebase(uid: string, teamCode: string): Promise<void> {
+export async function removeUserTeamFromFirebase(
+  uid: string,
+  teamCode: string,
+  nextActiveTeamCode: string = '',
+  memberName?: string
+): Promise<void> {
   if (!uid || !teamCode) return;
   const cleanCode = teamCode.trim().toUpperCase();
   try {
     const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, {
+    const updateData: Record<string, unknown> = {
       joinedTeamCodes: arrayRemove(cleanCode),
       lastUpdated: new Date().toISOString(),
-    }, { merge: true });
+    };
+    if (nextActiveTeamCode) {
+      updateData.activeTeamCode = nextActiveTeamCode.trim().toUpperCase();
+    } else {
+      updateData.activeTeamCode = '';
+    }
+    await setDoc(userRef, updateData, { merge: true });
     await leaveTeam(cleanCode, uid);
+
+    if (memberName?.trim()) {
+      try {
+        const tRef = doc(db, 'teams', cleanCode);
+        await setDoc(tRef, {
+          members: arrayRemove(memberName.trim()),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch {}
+    }
   } catch (err) {
     console.warn('[Firestore] Gagal menghapus relasi tim akun dari users:', err);
+    throw err;
   }
 }
 

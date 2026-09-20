@@ -6,7 +6,8 @@ import {
   GitPullRequest,
   UserPlus,
   Sparkles,
-  FileSpreadsheet
+  FileSpreadsheet,
+  LogOut
 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 import { getJoinedDivisions, getSavedActiveTeam } from '../utils/teamRegistry';
@@ -27,6 +28,7 @@ interface ControlsBarProps {
   onOpenDocumentView?: () => void;
   activeTeam?: DivisionTeam;
   onOpenTeamModal?: () => void;
+  onLeaveTeam?: (teamCode: string) => Promise<void> | void;
   onHandoverPatients?: () => void;
   onAddPatient?: () => void;
   onOpenAiImport?: () => void;
@@ -41,6 +43,7 @@ export function ControlsBar({
   onOpenWeekly,
   activeTeam,
   onOpenTeamModal,
+  onLeaveTeam,
   onHandoverPatients,
   onAddPatient,
   onOpenAiImport
@@ -59,7 +62,7 @@ export function ControlsBar({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-5 shadow-xs space-y-4">
-      {activeTeam && onOpenTeamModal && (
+      {activeTeam && activeTeam.teamCode && onOpenTeamModal && (
         <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border shadow-2xs transition-all ${activeTheme.bannerBg}`}>
           <div className="flex items-start gap-2.5">
             <div className={`w-8 h-8 rounded-lg ${activeTheme.bg} text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5 sm:mt-0 transition-colors`}>
@@ -94,6 +97,24 @@ export function ControlsBar({
             <button type="button" onClick={onOpenTeamModal} className="flex-1 sm:flex-initial px-3 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer min-h-[38px]">
               <span>Ganti Tim / PIN</span>
             </button>
+            {onLeaveTeam && (
+              <button
+                type="button"
+                onClick={() => {
+                  const confirmLeave = window.confirm(
+                    `Keluar dari Tim ${activeTeam.teamName || activeTeam.division} (PIN: ${activeTeam.teamCode})?\n\nAkun Anda akan dihapus dari daftar anggota tim ini. Data pasien tim tetap tersimpan dan aman untuk anggota lainnya.`
+                  );
+                  if (confirmLeave) {
+                    onLeaveTeam(activeTeam.teamCode);
+                  }
+                }}
+                className="flex-1 sm:flex-initial px-3 py-2 text-xs font-bold bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer min-h-[38px]"
+                title="Keluar dari tim aktif ini"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>Keluar Tim</span>
+              </button>
+            )}
           </div>
         </div>
       )}
