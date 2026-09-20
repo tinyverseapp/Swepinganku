@@ -1,6 +1,21 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Patient } from '../types';
-import { MASTER_ROOMS, normalizeRoomName, formatKamarOrBed, formatPatientNameWithHonorific, sortPatientsByRoom } from '../data/constants';
+import {
+  MASTER_ROOMS,
+  PLASTIC_SURGERY_ROOMS,
+  isPlasticSurgeryDivision,
+  normalizeRoomName,
+  normalizePlasticSurgeryRoomName,
+  extractPatientCallName,
+  cleanPatientNameForPlastic,
+  formatPlasticAge,
+  formatPlasticRoomKamar,
+  formatPlasticAdmissionDate,
+  formatPlasticDpjp,
+  formatKamarOrBed,
+  formatPatientNameWithHonorific,
+  sortPatientsByRoom
+} from '../data/constants';
 import { parseDateSafely, generateDocSweepingReportText, getWeekDays, formatDateIso, today, ReportFormatStyle } from '../utils/storage';
 import { FileText, Copy, Check, Plus, ArrowLeft, SlidersHorizontal, ChevronLeft, ChevronRight, CalendarDays, GitPullRequest, PanelLeftClose, Menu, Edit2, ChevronDown, ClipboardList, Scissors, Trash2 } from 'lucide-react';
 import { DivisionTeam } from '../types';
@@ -14,6 +29,7 @@ interface DocumentSweepingViewProps {
 }
 
 export function DocumentSweepingView({ patients, date, division, koasName, dpjps, allRooms, onDateChange, onBackToDashboard, onAddPatient, onEditPatient, onTogglePresence, onDeletePatient, activeTeam, onOpenTeamModal, onHandoverPatients, onOpenAiImport }: DocumentSweepingViewProps) {
+  const isPlastic = isPlasticSurgeryDivision(division);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [reportStyle, setReportStyle] = useState<ReportFormatStyle>(() => {
     if (typeof window !== 'undefined') {
@@ -27,7 +43,7 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
       const saved = localStorage.getItem('sweepinganku:includeEmptyRooms');
       if (saved !== null) return saved === 'true';
     }
-    return false; // Default: OFF (ruang kosong tidak ditampilkan)
+    return isPlastic; // Bedah Plastik default: On
   });
 
   const handleToggleEmptyRooms = () => {
@@ -89,12 +105,20 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
   const getDoctorRoles = (doctor: string) => Array.from(new Set((patients || []).filter(p => p.dpjp === doctor).map(getRoleLabel)));
   const currentTabPatients = useMemo(() => activeTab === 'all' ? (patients || []) : (patients || []).filter(p => p.dpjp === activeTab), [patients, activeTab]);
 
+  const plasticRooms = useMemo(() => {
+    const base: string[] = PLASTIC_SURGERY_ROOMS;
+    const current: string[] = Array.from(new Set(currentTabPatients.map(p => normalizePlasticSurgeryRoomName(p.room))));
+    const custom = current.filter((r: string) => !base.some((b: string) => b.toLowerCase() === r.toLowerCase()));
+    return [...base, ...custom];
+  }, [currentTabPatients]);
+
   const sortedRooms = useMemo(() => {
-    const base = allRooms && allRooms.length ? allRooms : MASTER_ROOMS;
-    const current = Array.from(new Set(currentTabPatients.map(p => normalizeRoomName(p.room))));
-    const custom = current.filter(r => !base.some(b => String(b).toLowerCase() === String(r).toLowerCase()));
+    if (isPlastic) return plasticRooms;
+    const base: string[] = allRooms && allRooms.length ? allRooms : MASTER_ROOMS;
+    const current: string[] = Array.from(new Set(currentTabPatients.map(p => normalizeRoomName(p.room))));
+    const custom = current.filter((r: string) => !base.some((b: string) => String(b).toLowerCase() === r.toLowerCase()));
     return [...base, ...custom];	
-  }, [allRooms, currentTabPatients]);
+  }, [isPlastic, plasticRooms, allRooms, currentTabPatients]);
 
   const handleCopyWA = async (withEmptyRooms: boolean = includeEmptyRooms, selectedStyle: ReportFormatStyle = reportStyle) => {
     const text = generateDocSweepingReportText({
@@ -287,148 +311,358 @@ export function DocumentSweepingView({ patients, date, division, koasName, dpjps
 
       <main className="flex-1 overflow-y-auto p-2 sm:p-6 lg:p-10 flex justify-center">
         <div className="bg-white w-full max-w-4xl shadow-md border border-slate-200/80 rounded-sm p-4 sm:p-10 md:p-16 min-h-[900px] text-slate-900 text-sm sm:text-[15px] leading-relaxed relative print:shadow-none print:border-none print:p-0">
-          <div className="mb-6 space-y-2 text-slate-800"><p>Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter.</p><p>Perkenalkan, dokter, saya <span className="font-semibold">{koasName || 'dr. Muda / Koas Bedah'}</span> selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi <span className="font-semibold">{division}</span>. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻</p></div>
-          <div className="my-5 space-y-1 font-bold"><p>*{dayName}, <span className="text-rose-600">{fullDateStr}</span>*</p><p>*Total pasien: <span className="text-rose-600">{currentTabPatients.length} pasien</span>*</p>{activeTab !== 'all' && <p className="text-teal-800">*{getDoctorRoles(activeTab).join(' / ') || 'DPJP'}: {activeTab}*</p>}</div>
-          <div className="my-6 border-b border-slate-200" />
-          <div className="space-y-6">
-            {sortedRooms.map(roomName => {
-              const roomPatients = sortPatientsByRoom(currentTabPatients.filter(p => normalizeRoomName(p.room).toLowerCase() === roomName.toLowerCase()));
-              if (!roomPatients.length) return includeEmptyRooms ? <div key={roomName} className="space-y-1.5"><div className="font-bold">*{roomName.toUpperCase()} (0)*</div><div className="text-slate-400 tracking-widest font-mono text-xs">____________________________________________________</div></div> : null;
-              return <div key={roomName} className="space-y-2"><div className="font-bold flex items-center justify-between"><span>*{roomName.toUpperCase()} ({roomPatients.length})*</span></div><ol className="space-y-1 list-none pl-0">{roomPatients.map((patient, idx) => {
-                const bedOrKamar = formatKamarOrBed(patient.room, patient.kamar);
-                const formattedName = formatPatientNameWithHonorific(patient.name, patient.age, patient.jk);
-                const role = getRoleLabel(patient);
-                const doctorName = patient.dpjp || '-';
-                const mainDpjp = patient.supervisingDpjp || '';
-                const status = patient.presenceStatus || 'belum_periksa';
-                const isMarkedPulang = status === 'pulang';
-                const isMarkedAda = status === 'ada';
-                const isBelumPeriksa = status === 'belum_periksa';
+          {isPlastic ? (
+            <div className="mb-6 space-y-2 text-slate-800">
+              <p className="font-semibold text-base sm:text-lg text-teal-950">
+                Selamat pagi dokter, mohon izin mengirimkan laporan pasien ruangan *Divisi Bedah Plastik*:
+              </p>
+              <div className="my-3 space-y-1 font-bold">
+                <p>*{dayName}, <span className="text-rose-600">{fullDateStr}</span>*</p>
+                <p>*Total Pasien : <span className="text-rose-600">{currentTabPatients.length} pasien</span>*</p>
+                {activeTab !== 'all' && (
+                  <p className="text-teal-800 font-bold">
+                    *{getDoctorRoles(activeTab).join(' / ') || 'DPJP'}: {activeTab}*
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 space-y-2 text-slate-800">
+                <p>Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter.</p>
+                <p>Perkenalkan, dokter, saya <span className="font-semibold">{koasName || 'dr. Muda / Koas Bedah'}</span> selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi <span className="font-semibold">{division}</span>. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻</p>
+              </div>
+              <div className="my-5 space-y-1 font-bold">
+                <p>*{dayName}, <span className="text-rose-600">{fullDateStr}</span>*</p>
+                <p>*Total pasien: <span className="text-rose-600">{currentTabPatients.length} pasien</span>*</p>
+                {activeTab !== 'all' && <p className="text-teal-800">*{getDoctorRoles(activeTab).join(' / ') || 'DPJP'}: {activeTab}*</p>}
+              </div>
+            </>
+          )}
 
-                return <li key={patient.id} className={`group p-2 -mx-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${
-                  isMarkedPulang
-                    ? 'bg-amber-50/60 hover:bg-amber-50'
-                    : isBelumPeriksa
-                    ? 'hover:bg-slate-100/70'
-                    : 'bg-emerald-50/25 hover:bg-emerald-50/50'
-                }`}>
-                  <div className="flex-1 leading-tight flex items-start gap-1.5">
-                    <span className="font-semibold text-slate-700 shrink-0 select-none min-w-[18px]">
-                      {idx + 1}.
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline flex-wrap gap-y-0.5">
-                        <span className="font-medium">{bedOrKamar}</span>
-                        <span className="text-slate-400 mx-1">/</span>
-                        <span className="font-bold">{formattedName}</span>
-                        {isMarkedPulang ? (
-                          <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                            Tanda Pulang
-                          </span>
-                        ) : isBelumPeriksa ? (
-                          <span className="ml-1.5 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-300">
-                            Belum Dicek
-                          </span>
-                        ) : null}
-                        <span className="text-slate-400 mx-1">/</span>
-                        <span>{patient.jk || '-'}</span>
-                        <span className="text-slate-400 mx-1">/</span>
-                        <span>{patient.age || '-'}</span>
-                        <span className="text-slate-400 mx-1">/</span>
-                        <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
-                        <span className="text-slate-400 mx-1">/</span>
-                        <span>{patient.dx || '-'}</span>
-                        {reportStyle === 'inline' && (
-                          <>
-                            <span className="text-slate-400 mx-1">/</span>
-                            <span className="text-teal-800 font-semibold">
-                              {role === 'DPJP' ? (
-                                <><b>DPJP:</b> {doctorName}</>
-                              ) : (
-                                <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
-                              )}
+          {isPlastic && (
+            <div className="mb-8 p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono text-slate-700 leading-relaxed shadow-xs">
+              <div className="text-[11px] uppercase tracking-wider font-bold text-teal-800 font-sans mb-3 flex items-center justify-between">
+                <span>Ringkasan Ruangan</span>
+                <span className="text-[10px] text-slate-500 font-normal">Format Divisi Bedah Plastik</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {sortedRooms.map(roomName => {
+                  const roomPatients = currentTabPatients.filter(p => normalizePlasticSurgeryRoomName(p.room).toLowerCase() === roomName.toLowerCase());
+                  const count = roomPatients.length;
+                  const callNames = roomPatients.map(p => extractPatientCallName(p.name)).filter(Boolean).join(', ');
+                  return (
+                    <div key={roomName} className={`flex items-baseline justify-between py-0.5 border-b border-slate-200/50 ${count > 0 ? 'text-slate-900 font-bold bg-teal-50/60 px-1.5 rounded' : 'text-slate-500'}`}>
+                      <span>{roomName} :</span>
+                      <span className="text-right">
+                        {count} pasien{count > 0 && callNames ? ` (${callNames})` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="my-6 border-b border-slate-200" />
+
+          {isPlastic ? (
+            <div className="space-y-6">
+              {sortedRooms.map(roomName => {
+                const roomPatients = currentTabPatients.filter(p => normalizePlasticSurgeryRoomName(p.room).toLowerCase() === roomName.toLowerCase());
+                if (!roomPatients.length) {
+                  return includeEmptyRooms ? (
+                    <div key={roomName} className="space-y-1.5">
+                      <div className="text-slate-400 tracking-widest font-mono text-xs">_____________________________________</div>
+                      <div className="font-bold text-slate-800">📍 *{roomName.toUpperCase()} (0)*</div>
+                    </div>
+                  ) : null;
+                }
+                return (
+                  <div key={roomName} className="space-y-3">
+                    <div className="text-slate-400 tracking-widest font-mono text-xs">_____________________________________</div>
+                    <div className="font-bold text-slate-800 flex items-center justify-between">
+                      <span>📍 *{roomName.toUpperCase()} ({roomPatients.length})*</span>
+                    </div>
+                    <div className="space-y-4">
+                      {roomPatients.map((patient, idx) => {
+                        const cleanName = cleanPatientNameForPlastic(patient.name);
+                        const jk = patient.jk ? (patient.jk.toUpperCase().startsWith('L') ? 'L' : 'P') : '-';
+                        const age = formatPlasticAge(patient.age);
+                        const rm = patient.rm || '-';
+                        const dx = patient.dx || '-';
+                        const mrs = formatPlasticAdmissionDate(patient);
+                        const ruanganKamar = formatPlasticRoomKamar(patient.room, patient.kamar);
+                        const dpjpText = formatPlasticDpjp(patient);
+                        const status = patient.presenceStatus || 'belum_periksa';
+                        const isMarkedPulang = status === 'pulang';
+                        const isMarkedAda = status === 'ada';
+                        const isBelumPeriksa = status === 'belum_periksa';
+
+                        return (
+                          <div
+                            key={patient.id}
+                            className={`group p-3 rounded-xl border transition-all ${
+                              isMarkedPulang
+                                ? 'bg-amber-50/50 border-amber-200'
+                                : isBelumPeriksa
+                                ? 'bg-slate-50/40 border-slate-200/80 hover:bg-slate-50'
+                                : 'bg-emerald-50/30 border-emerald-200/80 hover:bg-emerald-50/60'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 space-y-1 text-slate-800 text-sm sm:text-[14.5px]">
+                                <div className="flex items-baseline flex-wrap gap-1.5 font-bold text-slate-900 leading-snug">
+                                  <span className="text-slate-500 font-mono text-xs font-semibold mr-0.5">{idx + 1}.</span>
+                                  <span>{cleanName}</span>
+                                  <span className="text-slate-400 font-normal">/</span>
+                                  <span>{jk}</span>
+                                  <span className="text-slate-400 font-normal">/</span>
+                                  <span>{age}</span>
+                                  <span className="text-slate-400 font-normal">/</span>
+                                  <span className="font-mono text-xs">{rm}</span>
+                                  <span className="text-slate-400 font-normal">/</span>
+                                  <span className="font-medium text-slate-800">{dx}</span>
+                                  {isMarkedPulang ? (
+                                    <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                      Tanda Pulang
+                                    </span>
+                                  ) : isBelumPeriksa ? (
+                                    <span className="ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                                      Belum Dicek
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-slate-700 text-xs sm:text-sm">
+                                  <span className="font-semibold text-slate-600">MRS:</span> {mrs}
+                                </div>
+                                <div className="text-slate-700 text-xs sm:text-sm">
+                                  <span className="font-semibold text-slate-600">Ruangan:</span> {ruanganKamar}
+                                </div>
+                                <div className="text-teal-900 text-xs sm:text-sm font-semibold whitespace-pre-line pt-0.5">
+                                  {dpjpText}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 print:hidden pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => onTogglePresence?.(patient)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                                    isMarkedPulang
+                                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                                      : isBelumPeriksa
+                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  }`}
+                                  title={
+                                    isMarkedPulang
+                                      ? 'Tanda Rencana Pulang. Klik untuk ubah jadi Belum Dicek.'
+                                      : isBelumPeriksa
+                                      ? 'Belum Diperiksa di ruangan. Klik untuk tandai Masih Ada (Sudah Dicek).'
+                                      : 'Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
+                                  }
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    isMarkedPulang
+                                      ? 'bg-amber-500'
+                                      : isBelumPeriksa
+                                      ? 'bg-slate-400'
+                                      : 'bg-emerald-500'
+                                  }`} />
+                                  <span className="hidden sm:inline">
+                                    {isMarkedPulang
+                                      ? 'Tanda Pulang'
+                                      : isBelumPeriksa
+                                      ? 'Belum Dicek'
+                                      : 'Masih Ada'}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onEditPatient(patient)}
+                                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs cursor-pointer"
+                                  title="Edit data pasien"
+                                >
+                                  <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
+                                  <span className="hidden sm:inline">Edit</span>
+                                </button>
+                                {onDeletePatient && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeletePatient(patient)}
+                                    className={`transition-opacity flex items-center gap-1 px-2 py-1 border text-xs font-semibold rounded-lg shadow-2xs cursor-pointer ${
+                                      isMarkedPulang
+                                        ? 'opacity-100 bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                                        : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-white hover:bg-rose-50 border-slate-200 hover:border-rose-300 text-slate-500 hover:text-rose-600'
+                                    }`}
+                                    title={isMarkedPulang ? 'ACC Residen: Hapus data pasien pulang' : 'Hapus data pasien'}
+                                  >
+                                    <Trash2 className="w-3 h-3 text-rose-600 shrink-0" />
+                                    <span className="hidden sm:inline">Hapus</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {sortedRooms.map(roomName => {
+                const roomPatients = sortPatientsByRoom(currentTabPatients.filter(p => normalizeRoomName(p.room).toLowerCase() === roomName.toLowerCase()));
+                if (!roomPatients.length) return includeEmptyRooms ? <div key={roomName} className="space-y-1.5"><div className="font-bold">*{roomName.toUpperCase()} (0)*</div><div className="text-slate-400 tracking-widest font-mono text-xs">____________________________________________________</div></div> : null;
+                return <div key={roomName} className="space-y-2"><div className="font-bold flex items-center justify-between"><span>*{roomName.toUpperCase()} ({roomPatients.length})*</span></div><ol className="space-y-1 list-none pl-0">{roomPatients.map((patient, idx) => {
+                  const bedOrKamar = formatKamarOrBed(patient.room, patient.kamar);
+                  const formattedName = formatPatientNameWithHonorific(patient.name, patient.age, patient.jk);
+                  const role = getRoleLabel(patient);
+                  const doctorName = patient.dpjp || '-';
+                  const mainDpjp = patient.supervisingDpjp || '';
+                  const status = patient.presenceStatus || 'belum_periksa';
+                  const isMarkedPulang = status === 'pulang';
+                  const isMarkedAda = status === 'ada';
+                  const isBelumPeriksa = status === 'belum_periksa';
+
+                  return <li key={patient.id} className={`group p-2 -mx-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${
+                    isMarkedPulang
+                      ? 'bg-amber-50/60 hover:bg-amber-50'
+                      : isBelumPeriksa
+                      ? 'hover:bg-slate-100/70'
+                      : 'bg-emerald-50/25 hover:bg-emerald-50/50'
+                  }`}>
+                    <div className="flex-1 leading-tight flex items-start gap-1.5">
+                      <span className="font-semibold text-slate-700 shrink-0 select-none min-w-[18px]">
+                        {idx + 1}.
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline flex-wrap gap-y-0.5">
+                          <span className="font-medium">{bedOrKamar}</span>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span className="font-bold">{formattedName}</span>
+                          {isMarkedPulang ? (
+                            <span className="ml-1.5 text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                              Tanda Pulang
                             </span>
-                          </>
-                        )}
-                      </div>
-                      {reportStyle === 'multiline' && (
-                        <div className="mt-1 text-xs text-teal-800 font-medium leading-relaxed">
-                          {role === 'DPJP' ? (
-                            <div><span className="font-bold text-teal-900">DPJP:</span> {doctorName}</div>
-                          ) : (
+                          ) : isBelumPeriksa ? (
+                            <span className="ml-1.5 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                              Belum Dicek
+                            </span>
+                          ) : null}
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span>{patient.jk || '-'}</span>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span>{patient.age || '-'}</span>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span className="font-mono text-xs font-semibold">{patient.rm || '-'}</span>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span>{patient.dx || '-'}</span>
+                          {reportStyle === 'inline' && (
                             <>
-                              <div><span className="font-bold text-teal-900">DPJP:</span> {mainDpjp || '-'}</div>
-                              <div><span className="font-bold text-teal-900">{role}:</span> {doctorName}</div>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span className="text-teal-800 font-semibold">
+                                {role === 'DPJP' ? (
+                                  <><b>DPJP:</b> {doctorName}</>
+                                ) : (
+                                  <><b>DPJP:</b> {mainDpjp || '-'} <span className="text-slate-400 font-normal">/</span> <b>{role}:</b> {doctorName}</>
+                                )}
+                              </span>
                             </>
                           )}
                         </div>
-                      )}
+                        {reportStyle === 'multiline' && (
+                          <div className="mt-1 text-xs text-teal-800 font-medium leading-relaxed">
+                            {role === 'DPJP' ? (
+                              <div><span className="font-bold text-teal-900">DPJP:</span> {doctorName}</div>
+                            ) : (
+                              <>
+                                <div><span className="font-bold text-teal-900">DPJP:</span> {mainDpjp || '-'}</div>
+                                <div><span className="font-bold text-teal-900">{role}:</span> {doctorName}</div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 print:hidden">
-                    <button
-                      type="button"
-                      onClick={() => onTogglePresence?.(patient)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                        isMarkedPulang
-                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                          : isBelumPeriksa
-                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                      }`}
-                      title={
-                        isMarkedPulang
-                          ? 'Tanda Rencana Pulang. Klik untuk ubah jadi Belum Dicek.'
-                          : isBelumPeriksa
-                          ? 'Belum Diperiksa di ruangan. Klik untuk tandai Masih Ada (Sudah Dicek).'
-                          : 'Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
-                      }
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        isMarkedPulang
-                          ? 'bg-amber-500'
-                          : isBelumPeriksa
-                          ? 'bg-slate-400'
-                          : 'bg-emerald-500'
-                      }`} />
-                      <span className="hidden sm:inline">
-                        {isMarkedPulang
-                          ? 'Tanda Pulang'
-                          : isBelumPeriksa
-                          ? 'Belum Dicek'
-                          : 'Masih Ada'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onEditPatient(patient)}
-                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs cursor-pointer"
-                      title="Edit data pasien"
-                    >
-                      <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
-                      <span className="hidden sm:inline">Edit</span>
-                    </button>
-                    {onDeletePatient && (
+                    <div className="flex items-center gap-1.5 shrink-0 print:hidden">
                       <button
                         type="button"
-                        onClick={() => onDeletePatient(patient)}
-                        className={`transition-opacity flex items-center gap-1 px-2 py-1 border text-xs font-semibold rounded-lg shadow-2xs cursor-pointer ${
+                        onClick={() => onTogglePresence?.(patient)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
                           isMarkedPulang
-                            ? 'opacity-100 bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
-                            : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-white hover:bg-rose-50 border-slate-200 hover:border-rose-300 text-slate-500 hover:text-rose-600'
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                            : isBelumPeriksa
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                         }`}
-                        title={isMarkedPulang ? 'ACC Residen: Hapus data pasien pulang' : 'Hapus data pasien'}
+                        title={
+                          isMarkedPulang
+                            ? 'Tanda Rencana Pulang. Klik untuk ubah jadi Belum Dicek.'
+                            : isBelumPeriksa
+                            ? 'Belum Diperiksa di ruangan. Klik untuk tandai Masih Ada (Sudah Dicek).'
+                            : 'Masih Ada di ruangan. Klik untuk tandai Rencana Pulang.'
+                        }
                       >
-                        <Trash2 className="w-3 h-3 text-rose-600 shrink-0" />
-                        <span className="hidden sm:inline">Hapus</span>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          isMarkedPulang
+                            ? 'bg-amber-500'
+                            : isBelumPeriksa
+                            ? 'bg-slate-400'
+                            : 'bg-emerald-500'
+                        }`} />
+                        <span className="hidden sm:inline">
+                          {isMarkedPulang
+                            ? 'Tanda Pulang'
+                            : isBelumPeriksa
+                            ? 'Belum Dicek'
+                            : 'Masih Ada'}
+                        </span>
                       </button>
-                    )}
-                  </div>
-                </li>;
-              })}</ol></div>;
-            })}
-          </div>
-          <div className="mt-10 pt-6 border-t border-slate-200"><p>Mohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻</p></div>
+                      <button
+                        type="button"
+                        onClick={() => onEditPatient(patient)}
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg shadow-2xs cursor-pointer"
+                        title="Edit data pasien"
+                      >
+                        <Edit2 className="w-3 h-3 text-teal-600 shrink-0" />
+                        <span className="hidden sm:inline">Edit</span>
+                      </button>
+                      {onDeletePatient && (
+                        <button
+                          type="button"
+                          onClick={() => onDeletePatient(patient)}
+                          className={`transition-opacity flex items-center gap-1 px-2 py-1 border text-xs font-semibold rounded-lg shadow-2xs cursor-pointer ${
+                            isMarkedPulang
+                              ? 'opacity-100 bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                              : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-white hover:bg-rose-50 border-slate-200 hover:border-rose-300 text-slate-500 hover:text-rose-600'
+                          }`}
+                          title={isMarkedPulang ? 'ACC Residen: Hapus data pasien pulang' : 'Hapus data pasien'}
+                        >
+                          <Trash2 className="w-3 h-3 text-rose-600 shrink-0" />
+                          <span className="hidden sm:inline">Hapus</span>
+                        </button>
+                      )}
+                    </div>
+                  </li>;
+                })}</ol></div>;
+              })}
+            </div>
+          )}
+
+          {isPlastic ? (
+            <div className="mt-10 pt-6 border-t border-slate-200 text-slate-700 space-y-2">
+              <div className="text-slate-400 tracking-widest font-mono text-xs">_____________________________________</div>
+              <p className="mt-4">Berikut untuk listnya dokter, mohon maaf jika terdapat kesalahan, terima kasih banyak sebelumnya</p>
+            </div>
+          ) : (
+            <div className="mt-10 pt-6 border-t border-slate-200">
+              <p>Mohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻</p>
+            </div>
+          )}
         </div>
       </main>
     </div>

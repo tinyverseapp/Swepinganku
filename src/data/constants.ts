@@ -3,7 +3,7 @@ import { Patient } from '../types';
 export const DIVISIONS: string[] = ['Bedah Digestif & Umum','Bedah Anak','Urologi','Ortopedi','Bedah Saraf','BTKV','Bedah Plastik','Bedah Onkologi'];
 export const DIVISION_CONSULTANTS: Record<string, string[]> = {
   'Bedah Anak': ['dr. Santi Rini., Sp.BA., Subsp.DA(K)','dr. Fahad Ahmed Shah K., Sp.BA'],
-  'Bedah Plastik': ['dr. Andi Mohammad Ardan, SpBP-RE','dr. Yudhy Arius, Sp.BP-RE'],
+  'Bedah Plastik': ['dr. Andi Mohammad Ardan, Sp. BP-RE','dr. Yudhy Arius, Sp. BP-RE'],
   'Bedah Onkologi': ['dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes','dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
   'Urologi': ['dr. Poppy Desra Syahfitri Nasution, Sp.U','dr. Made Adi Wiratama, Sp.U, M.Ked.Klin, FICS','dr. Muhammad Rozaqy Ishaq, Sp.U, M.Ked.Klin','dr. Boyke Soebhali, Sp.U(K)','dr. Ricky Agave Ompusunggu, Sp.U'],
   'BTKV': ['dr. Ivan Joalsen Mangara Tua, Sp.BTKV, Subsp-VE(K)','dr. Michael Caesario, Sp.BTKV(K)','dr. Ery Irawan, Sp.BTKV, M.Ked.Klin.','dr. David Hermawan Christian, Sp.BTKV, M.Ked.Klin.(K)'],
@@ -122,8 +122,177 @@ export function fuzzyMatchDoctor(input: string, candidates: string[]): string {
 }
 
 /** Master database ruangan dengan urutan tetap resmi. */
-export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Mawar','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia','Tulip'];
+export const MASTER_ROOMS: string[] = ['IGD','Seroja','NICU','PICU','ICCU','ICU','Lily','Mawar','Teratai','Anggrek','Edelweis','Cempaka','Aster','Melati','Flamboyan 1','Flamboyan 2','HCU','Angsoka','Dahlia','Tulip'];
 export const DEFAULT_ROOMS = MASTER_ROOMS;
+
+/** Urutan ruangan khusus divisi Bedah Plastik & Rekonstruksi Estetik */
+export const PLASTIC_SURGERY_ROOMS: string[] = [
+  'IGD',
+  'PICU',
+  'NICU',
+  'ICU',
+  'ICCU',
+  'Lily',
+  'Teratai',
+  'Anggrek',
+  'Edelweis',
+  'Cempaka',
+  'Aster',
+  'Mawar',
+  'Melati',
+  'Flamboyan 1',
+  'Flamboyan 2',
+  'HCU / Seruni',
+  'Angsoka',
+  'Dahlia',
+  'Seroja'
+];
+
+export function isPlasticSurgeryDivision(division?: string | null): boolean {
+  if (!division) return false;
+  const d = division.toLowerCase();
+  return d.includes('plastik') || d.includes('plastic') || d.includes('bp-re') || d.includes('bpre');
+}
+
+export function normalizePlasticSurgeryRoomName(rawRoom?: string): string {
+  if (!rawRoom) return '';
+  const trimmed = rawRoom.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'hcu' || lower === 'seruni' || lower === 'hcu / seruni' || lower === 'seruni / hcu' || (lower.includes('hcu') && lower.includes('seruni'))) {
+    return 'HCU / Seruni';
+  }
+  if (lower === 'flamboyan' || lower === 'flamboyan 1') {
+    return 'Flamboyan 1';
+  }
+  if (lower === 'flamboyan 2') {
+    return 'Flamboyan 2';
+  }
+  const found = PLASTIC_SURGERY_ROOMS.find((r) => r.toLowerCase() === lower);
+  if (found) return found;
+  return normalizeRoomName(rawRoom);
+}
+
+/**
+ * Ekstrak nama panggilan singkat pasien untuk ringkasan header Bedah Plastik
+ * Contoh: "I Komang Swardika" -> "Komang", "Ahmad Tamami" -> "Ahmad Tamami", "Muhammad Shahibul Fadhilah" -> "Shahibul"
+ */
+export function extractPatientCallName(fullName?: string): string {
+  if (!fullName) return '';
+  const clean = fullName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
+  if (!clean) return fullName.trim();
+
+  // Awalan khas Bali / gelar kekeluargaan
+  const baliMatch = clean.match(/^(?:i|ni|gusti|i\s+gusti|ni\s+gusti|anak\s+agung|tjokorda|ida\s+bagus)\s+([a-zA-Z]+)/i);
+  if (baliMatch && baliMatch[1]) {
+    return baliMatch[1];
+  }
+
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0];
+
+  // Awalan seperti Muhammad / Moh / Muh -> ambil kata kedua
+  if (/^(muhammad|mohammad|mohamad|muh\.?|moh\.?|m\.?|i|ni)$/i.test(parts[0]) && parts[1]) {
+    return parts[1];
+  }
+
+  // Nama ganda umum di Indonesia (misal "Ahmad Tamami", "Siti Rukanah", "Budi Setiawan", "Stephanus Arung")
+  const firstLower = parts[0].toLowerCase();
+  if (firstLower === 'ahmad' || firstLower === 'siti' || firstLower === 'budi' || firstLower === 'stephanus') {
+    return `${parts[0]} ${parts[1]}`;
+  }
+
+  return parts[0];
+}
+
+/** Bersihkan honorific untuk laporan Bedah Plastik */
+export function cleanPatientNameForPlastic(name?: string): string {
+  if (!name) return '-';
+  const clean = name.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
+  return clean || name.trim();
+}
+
+/** Format usia khusus Bedah Plastik (misal: "26 tahun", "1 tahun") */
+export function formatPlasticAge(age?: string): string {
+  if (!age || !age.trim() || age.trim() === '-') return '-';
+  const s = age.trim();
+  if (/^\d+$/.test(s)) return `${s} tahun`;
+  if (/^\d+\s*thn?$/i.test(s)) return s.replace(/\s*thn?$/i, ' tahun');
+  return s;
+}
+
+/** Format Ruangan/Kamar khusus Bedah Plastik (misal: "Kamar 10", "Aster 6.1", "Melati 6", "K3001") */
+export function formatPlasticRoomKamar(room?: string, kamar?: string): string {
+  const normRoom = normalizePlasticSurgeryRoomName(room);
+  const cleanKamar = (kamar || '').trim();
+  if (!cleanKamar || cleanKamar === '-' || cleanKamar.toLowerCase() === 'kamar -') {
+    return normRoom || '-';
+  }
+  // Jika kamar sudah menyertakan nama ruangan (misal: "Aster 6.3")
+  if (normRoom && cleanKamar.toLowerCase().includes(normRoom.toLowerCase())) {
+    return cleanKamar;
+  }
+  // Jika kamar sudah memiliki awalan kamar/bed atau kode khusus (misal "K3001", "Bed 1")
+  if (/^(kamar|bed|k\d{3,})/i.test(cleanKamar)) {
+    return cleanKamar;
+  }
+  if (/^k\d{1,2}$/i.test(cleanKamar)) {
+    return `Kamar ${cleanKamar.slice(1)}`;
+  }
+  // Jika ruangan Aster atau Melati dan kamar nomor seperti "6.3", "6.1", "2.1"
+  if (/aster|melati/i.test(normRoom) && /^[\d\.]+$/.test(cleanKamar)) {
+    return `${normRoom} ${cleanKamar}`;
+  }
+  // Jika hanya angka nomor kamar murni
+  if (/^\d+(\.\d+)?$/.test(cleanKamar)) {
+    return `Kamar ${cleanKamar}`;
+  }
+  return cleanKamar;
+}
+
+/** Format tanggal MRS khusus Bedah Plastik (DD/MM/YYYY) */
+export function formatPlasticAdmissionDate(patient: Patient): string {
+  const rawDate = patient.admissionDate || patient.date;
+  if (!rawDate || !rawDate.trim() || rawDate.trim() === '-') return '-';
+  const trimmed = rawDate.trim();
+  // Jika sudah format DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+  // Jika format YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parts = trimmed.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  // Coba parse tanggal
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  return trimmed;
+}
+
+/** Format DPJP/Konsulen khusus Bedah Plastik */
+export function formatPlasticDpjp(patient: Patient): string {
+  const dpjp = patient.dpjp || '-';
+  const role = patient.doctorRole;
+  const mainDpjp = patient.supervisingDpjp || '';
+
+  if (role === 'RABER') {
+    if (mainDpjp) {
+      return `DPJP: ${mainDpjp}\nRaber: ${dpjp}`;
+    }
+    return `DPJP: ${dpjp} (Raber)`;
+  }
+  if (role === 'KONSUL') {
+    if (mainDpjp) {
+      return `DPJP: ${mainDpjp}\nKonsul: ${dpjp}`;
+    }
+    return `DPJP: ${dpjp} (Konsul)`;
+  }
+  return `DPJP: ${dpjp}`;
+}
+
 export const BED_ONLY_ROOMS: string[] = ['NICU','PICU','ICCU','ICU'];
 export function isBedRoom(roomName?: string): boolean { if (!roomName) return false; const upper = roomName.trim().toUpperCase(); return BED_ONLY_ROOMS.some((r) => r.toUpperCase() === upper); }
 export function normalizeRoomName(roomName?: string): string { if (!roomName) return ''; const trimmed = roomName.trim(); const found = MASTER_ROOMS.find((r) => r.toLowerCase() === trimmed.toLowerCase()); return found || trimmed; }

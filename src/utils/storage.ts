@@ -2,6 +2,15 @@ import { Patient, WeeklyRow, RotationWeek, DivisionTeam } from '../types';
 import {
   SAMPLE_PATIENTS,
   MASTER_ROOMS,
+  PLASTIC_SURGERY_ROOMS,
+  isPlasticSurgeryDivision,
+  normalizePlasticSurgeryRoomName,
+  extractPatientCallName,
+  cleanPatientNameForPlastic,
+  formatPlasticAge,
+  formatPlasticRoomKamar,
+  formatPlasticAdmissionDate,
+  formatPlasticDpjp,
   DIVISIONS,
   DEFAULT_TEAM_CODES,
   getDefaultTeamCode,
@@ -66,10 +75,21 @@ export function setActiveTeam(team:DivisionTeam):void{localStorage.setItem(`${KE
 export const OLD_FAHAD_REGEX = /fahad.*khaisama/i;
 export const TARGET_FAHAD_NAME = 'dr. Fahad Ahmed Shah K., Sp.BA';
 
+export const TARGET_ARDAN_NAME = 'dr. Andi Mohammad Ardan, Sp. BP-RE';
+export const TARGET_YUDHY_NAME = 'dr. Yudhy Arius, Sp. BP-RE';
+
 export function normalizeTargetDoctorName(name?: string): string {
   if (!name) return '';
   if (OLD_FAHAD_REGEX.test(name) || name.includes('Khaisama') || /fahad\s+ahmed\s+shah\s+khaisama/i.test(name)) {
     return TARGET_FAHAD_NAME;
+  }
+  // dr. Andi Mohammad Ardan, SpBP-RE -> dr. Andi Mohammad Ardan, Sp. BP-RE
+  if (/andi\s+mohammad\s+ardan/i.test(name)) {
+    return TARGET_ARDAN_NAME;
+  }
+  // dr. Yudhy Arius, Sp.BP-RE -> dr. Yudhy Arius, Sp. BP-RE
+  if (/yudhy\s+arius/i.test(name)) {
+    return TARGET_YUDHY_NAME;
   }
   return name;
 }
@@ -96,13 +116,19 @@ export function cleanRemovedDoctorsFromStorage():void{
             .map((p:any)=>{
               let pChanged=false;
               const updated={...p};
-              if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
-                updated.dpjp=TARGET_FAHAD_NAME;
-                pChanged=true;
+              if(updated.dpjp){
+                const norm = normalizeTargetDoctorName(updated.dpjp);
+                if(norm !== updated.dpjp){
+                  updated.dpjp = norm;
+                  pChanged = true;
+                }
               }
-              if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
-                updated.supervisingDpjp=TARGET_FAHAD_NAME;
-                pChanged=true;
+              if(updated.supervisingDpjp){
+                const norm = normalizeTargetDoctorName(updated.supervisingDpjp);
+                if(norm !== updated.supervisingDpjp){
+                  updated.supervisingDpjp = norm;
+                  pChanged = true;
+                }
               }
               if(pChanged)modified=true;
               return updated;
@@ -110,13 +136,19 @@ export function cleanRemovedDoctorsFromStorage():void{
           if(cleaned.length!==parsed.length||modified)localStorage.setItem(k,JSON.stringify(cleaned));
         } else if(parsed&&typeof parsed==='object'){
           let objChanged=false;
-          if(parsed.dpjp&&(OLD_FAHAD_REGEX.test(parsed.dpjp)||parsed.dpjp.includes('Khaisama'))){
-            parsed.dpjp=TARGET_FAHAD_NAME;
-            objChanged=true;
+          if(parsed.dpjp){
+            const norm = normalizeTargetDoctorName(parsed.dpjp);
+            if(norm !== parsed.dpjp){
+              parsed.dpjp = norm;
+              objChanged = true;
+            }
           }
-          if(parsed.supervisingDpjp&&(OLD_FAHAD_REGEX.test(parsed.supervisingDpjp)||parsed.supervisingDpjp.includes('Khaisama'))){
-            parsed.supervisingDpjp=TARGET_FAHAD_NAME;
-            objChanged=true;
+          if(parsed.supervisingDpjp){
+            const norm = normalizeTargetDoctorName(parsed.supervisingDpjp);
+            if(norm !== parsed.supervisingDpjp){
+              parsed.supervisingDpjp = norm;
+              objChanged = true;
+            }
           }
           if(objChanged)localStorage.setItem(k,JSON.stringify(parsed));
         }
@@ -137,13 +169,19 @@ export function loadPatients(date:string,division:string,teamCode?:string):Patie
           .filter((p:Patient)=>!isRemovedDoctor(p?.dpjp))
           .map((p:Patient)=>{
             const updated={...p};
-            if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
-              updated.dpjp=TARGET_FAHAD_NAME;
-              modified=true;
+            if(updated.dpjp){
+              const norm = normalizeTargetDoctorName(updated.dpjp);
+              if(norm !== updated.dpjp){
+                updated.dpjp = norm;
+                modified = true;
+              }
             }
-            if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
-              updated.supervisingDpjp=TARGET_FAHAD_NAME;
-              modified=true;
+            if(updated.supervisingDpjp){
+              const norm = normalizeTargetDoctorName(updated.supervisingDpjp);
+              if(norm !== updated.supervisingDpjp){
+                updated.supervisingDpjp = norm;
+                modified = true;
+              }
             }
             return updated;
           });
@@ -162,11 +200,11 @@ export function loadPatients(date:string,division:string,teamCode?:string):Patie
             .filter((p:Patient)=>!isRemovedDoctor(p?.dpjp))
             .map((p:Patient)=>{
               const updated={...p};
-              if(updated.dpjp&&(OLD_FAHAD_REGEX.test(updated.dpjp)||updated.dpjp.includes('Khaisama'))){
-                updated.dpjp=TARGET_FAHAD_NAME;
+              if(updated.dpjp){
+                updated.dpjp = normalizeTargetDoctorName(updated.dpjp);
               }
-              if(updated.supervisingDpjp&&(OLD_FAHAD_REGEX.test(updated.supervisingDpjp)||updated.supervisingDpjp.includes('Khaisama'))){
-                updated.supervisingDpjp=TARGET_FAHAD_NAME;
+              if(updated.supervisingDpjp){
+                updated.supervisingDpjp = normalizeTargetDoctorName(updated.supervisingDpjp);
               }
               return updated;
             });
@@ -238,7 +276,106 @@ function roleHeaderForPatients(patients:Patient[], fallback?:string):string{
   return `*DPJP: ${fallback||patients[0]?.dpjp||'-'}*`;
 }
 
+export function generatePlasticSurgeryReportText({
+  date,
+  patients,
+  includeEmptyRooms = true,
+  selectedDpjp,
+}: {
+  date: string;
+  patients: Patient[];
+  includeEmptyRooms?: boolean;
+  selectedDpjp?: string;
+}): string {
+  const d = parseDateSafely(date);
+  let dayName = 'Hari ini';
+  let fullDateStr = date;
+  try {
+    dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
+    fullDateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {}
+
+  let filtered = patients;
+  if (selectedDpjp) {
+    filtered = patients.filter((p) => p.dpjp === selectedDpjp);
+  }
+
+  const header = `Selamat pagi dokter, mohon izin mengirimkan laporan pasien ruangan *Divisi Bedah Plastik*: \n\n*${dayName}, ${fullDateStr}*\n*Total Pasien : ${filtered.length} pasien* \n`;
+
+  // 1. Rekap ringkasan jumlah pasien per ruangan di awal
+  const recapLines = PLASTIC_SURGERY_ROOMS.map((roomName) => {
+    const roomPatients = filtered.filter(
+      (p) => normalizePlasticSurgeryRoomName(p.room).toLowerCase() === roomName.toLowerCase()
+    );
+    if (roomPatients.length === 0) {
+      return `${roomName} : 0 pasien `;
+    }
+    const callNames = roomPatients.map((p) => extractPatientCallName(p.name)).filter(Boolean).join(', ');
+    return `${roomName} : ${roomPatients.length} pasien (${callNames})`;
+  });
+
+  // Tambahkan jika ada ruangan di luar master khusus Bedah Plastik
+  const customRooms = [...new Set(filtered.map((p) => normalizePlasticSurgeryRoomName(p.room)))].filter(
+    (cr) => !PLASTIC_SURGERY_ROOMS.some((pr) => pr.toLowerCase() === cr.toLowerCase())
+  );
+  const customRecapLines = customRooms.map((roomName) => {
+    const roomPatients = filtered.filter(
+      (p) => normalizePlasticSurgeryRoomName(p.room).toLowerCase() === roomName.toLowerCase()
+    );
+    const callNames = roomPatients.map((p) => extractPatientCallName(p.name)).filter(Boolean).join(', ');
+    return `${roomName} : ${roomPatients.length} pasien (${callNames})`;
+  });
+
+  const fullRecap = [...recapLines, ...customRecapLines].join('\n');
+
+  // 2. Rincian detail per ruangan dengan pin 📍 dan pemisah garis
+  const allRoomsList = [...PLASTIC_SURGERY_ROOMS, ...customRooms];
+  const detailBlocks: string[] = [];
+
+  for (const roomName of allRoomsList) {
+    const roomPatients = filtered.filter(
+      (p) => normalizePlasticSurgeryRoomName(p.room).toLowerCase() === roomName.toLowerCase()
+    );
+    if (roomPatients.length === 0) {
+      if (includeEmptyRooms) {
+        detailBlocks.push(`_____________________________________\n📍 *${roomName.toUpperCase()} (0)*`);
+      }
+      continue;
+    }
+
+    const patientCards = roomPatients
+      .map((p) => {
+        const cleanName = cleanPatientNameForPlastic(p.name);
+        const jk = p.jk ? (p.jk.toUpperCase().startsWith('L') ? 'L' : 'P') : '-';
+        const age = formatPlasticAge(p.age);
+        const rm = p.rm || '-';
+        const dx = p.dx || '-';
+        const mrs = formatPlasticAdmissionDate(p);
+        const ruanganKamar = formatPlasticRoomKamar(p.room, p.kamar);
+        const dpjpText = formatPlasticDpjp(p);
+
+        return `${cleanName} / ${jk} / ${age} / ${rm} / ${dx}\nMRS: ${mrs}\nRuangan: ${ruanganKamar}\n${dpjpText}`;
+      })
+      .join('\n\n');
+
+    detailBlocks.push(`_____________________________________\n📍 *${roomName.toUpperCase()} (${roomPatients.length})*\n${patientCards}`);
+  }
+
+  const closing = '_____________________________________\n\nBerikut untuk listnya dokter, mohon maaf jika terdapat kesalahan, terima kasih banyak sebelumnya';
+
+  return `${header}\n${fullRecap}\n${detailBlocks.join('\n')}\n\n${closing}`.trim();
+}
+
 export function generateReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,style='multiline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];style?:ReportFormatStyle;}):string{
+  if (isPlasticSurgeryDivision(division)) {
+    return generatePlasticSurgeryReportText({
+      date,
+      patients,
+      includeEmptyRooms: true,
+      selectedDpjp: mode === 'dpjp' ? selectedDpjp : undefined
+    });
+  }
+
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter.\nPerkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}.\nMohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
@@ -253,6 +390,15 @@ export function generateReportText({mode,date,division,koasName,selectedDpjp,pat
 }
 
 export function generateDocSweepingReportText({mode,date,division,koasName,selectedDpjp,patients,allRooms,includeEmptyRooms=false,style='multiline'}:{mode:'dpjp'|'all';date:string;division:string;koasName:string;selectedDpjp?:string;patients:Patient[];allRooms:string[];includeEmptyRooms?:boolean;style?:ReportFormatStyle;}):string{
+  if (isPlasticSurgeryDivision(division)) {
+    return generatePlasticSurgeryReportText({
+      date,
+      patients,
+      includeEmptyRooms,
+      selectedDpjp: mode === 'dpjp' ? selectedDpjp : undefined
+    });
+  }
+
   const d=parseDateSafely(date);let dayName=date;try{dayName=d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}catch{}
   const header=`Selamat pagi, dokter. Mohon maaf mengganggu waktunya, dokter. Perkenalkan, dokter, saya ${koasName||'[Nama Koas]'} selaku dokter muda yang saat ini sedang menjalani stase bedah Divisi ${division}. Mohon izin untuk melaporkan pasien dokter di ruangan rawat inap pada hari ini, dokter. 🙏🏻\n\n*${dayName}*`;
   const closing='\n\nMohon maaf jika terdapat kesalahan, dokter. Terima kasih, dokter. 🙏🏻';
