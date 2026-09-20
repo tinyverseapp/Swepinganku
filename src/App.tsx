@@ -18,7 +18,7 @@ import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/tea
 import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
 import { subscribeToTeam } from './lib/teamService';
 import { auth } from './lib/firebase';
-import { syncJoinedTeamsFromFirebase } from './lib/teamMembersService';
+import { syncJoinedTeamsFromFirebase, syncUserTeamToFirebase } from './lib/teamMembersService';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
 import { Topbar } from './components/Topbar';
@@ -82,10 +82,28 @@ export default function App() {
       if (!user) return;
       try {
         const teams = await syncJoinedTeamsFromFirebase(user.uid);
+        // Save all teams retrieved from cloud to local joined registry
+        teams.forEach((t) => saveJoinedTeam(t));
+
+        // Sync existing local joined teams to cloud so other devices immediately inherit them
+        const localJoined = loadJoinedTeams();
+        localJoined.forEach((localTeam) => {
+          if (localTeam.teamCode) {
+            syncUserTeamToFirebase(
+              user.uid,
+              localTeam.teamCode,
+              localTeam.teamCode === getSavedActiveTeam()?.teamCode,
+              user.displayName || koasName,
+              user.email || '',
+            ).catch(() => {});
+          }
+        });
+
         const current = getSavedActiveTeam();
-        const next = current && teams.some((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase())
-          ? teams.find((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase()) || current
-          : teams[teams.length - 1] || null;
+        const allAvailable = teams.length ? teams : localJoined;
+        const next = current && allAvailable.some((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase())
+          ? allAvailable.find((team) => team.teamCode.trim().toUpperCase() === current.teamCode.trim().toUpperCase()) || current
+          : allAvailable[allAvailable.length - 1] || null;
 
         if (next) {
           saveJoinedTeam(next);
@@ -344,6 +362,15 @@ export default function App() {
   const handleDateChange = useCallback((newDate: string) => setDate(newDate), []);
   const handleSwitchTeam = (newTeam: DivisionTeam, carryOverFromYesterday: boolean) => {
     setActiveTeam(newTeam); saveCurrentTeam(newTeam); saveJoinedTeam(newTeam); setDivision(newTeam.division); const refreshed = loadPatients(date, newTeam.division, newTeam.teamCode); setPatients(refreshed);
+    if (auth.currentUser?.uid && newTeam.teamCode) {
+      syncUserTeamToFirebase(
+        auth.currentUser.uid,
+        newTeam.teamCode,
+        true,
+        auth.currentUser.displayName || koasName,
+        auth.currentUser.email || '',
+      ).catch(() => {});
+    }
     if (carryOverFromYesterday) { const result = handoverYesterdayPatients(date, newTeam.division, true); const afterHandover = loadPatients(date, newTeam.division, newTeam.teamCode); const withFirebaseMeta = afterHandover.map((p) => ({ ...p, teamCode: newTeam.teamCode, date, division: newTeam.division })); setPatients(withFirebaseMeta); if (newTeam.teamCode && withFirebaseMeta.length) savePatientsBatch(newTeam.teamCode, date, withFirebaseMeta).catch((error) => showToast(`Firebase gagal menyimpan operan: ${error.message}`)); showToast(`Terhubung ke Tim ${newTeam.teamName || newTeam.teamCode}. Dioper ${result.addedCount} pasien.`); } else showToast(`Terhubung ke Tim ${newTeam.teamName || newTeam.teamCode}.`);
   };
 

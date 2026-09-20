@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Users, Circle, RefreshCw, ChevronDown, LogOut } from 'lucide-react';
-import { subscribeToTeamMembers, registerTeamMember, leaveTeam, TeamMember } from '../lib/teamMembersService';
+import { subscribeToTeamMembers, registerTeamMember, leaveTeam, syncUserTeamToFirebase, removeUserTeamFromFirebase, TeamMember } from '../lib/teamMembersService';
 import { subscribeToTeam } from '../lib/teamService';
 import { getSavedActiveTeam, removeJoinedTeam } from '../utils/teamRegistry';
 import { auth } from '../lib/firebase';
@@ -42,8 +42,8 @@ export function TeamMembersPanel({ inline = false }: TeamMembersPanelProps = {})
     setError('');
     const currentUser = auth.currentUser;
     if (currentUser) {
-      registerTeamMember(teamCode, currentUser.uid, currentUser.displayName || '', currentUser.email || '')
-        .catch((err) => { console.error('[Firestore] registerTeamMember error:', err); setError('Gagal mendaftarkan Anda ke tim.'); });
+      syncUserTeamToFirebase(currentUser.uid, teamCode, true, currentUser.displayName || '', currentUser.email || '')
+        .catch((err) => { console.error('[Firestore] syncUserTeamToFirebase error:', err); setError('Gagal mendaftarkan Anda ke tim.'); });
     }
 
     const unsubTeam = subscribeToTeam(teamCode, (team) => {
@@ -73,8 +73,8 @@ export function TeamMembersPanel({ inline = false }: TeamMembersPanelProps = {})
     setLeaving(true);
     setError('');
     try {
-      // 1. Revoke the actual Firebase membership first.
-      await leaveTeam(teamCode, currentUser.uid);
+      // 1. Revoke the actual Firebase membership and remove from user profile.
+      await removeUserTeamFromFirebase(currentUser.uid, teamCode);
 
       // 2. Only after Firebase succeeds, invalidate the local cache.
       const remainingTeams = removeJoinedTeam(teamCode);

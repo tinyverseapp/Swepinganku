@@ -4,6 +4,8 @@ import { DIVISIONS, generateDivisionPin } from '../data/constants';
 import { saveJoinedTeam, loadJoinedTeams } from '../utils/teamRegistry';
 import { today } from '../utils/storage';
 import { getCurrentWeekRange, getTeam, createOrUpdateTeam } from '../lib/teamService';
+import { syncUserTeamToFirebase } from '../lib/teamMembersService';
+import { auth } from '../lib/firebase';
 import { Users, KeyRound, Copy, Check, X, RefreshCw, ArrowLeftRight, ShieldCheck, CalendarDays, Plus, LogIn, ArrowLeft } from 'lucide-react';
 import { useDivisionColors, getDivisionColorTheme } from '../utils/divisionColors';
 
@@ -106,6 +108,15 @@ export function TeamSwitchModal({ isOpen, onClose, currentTeam, currentDivision,
 
       saveJoinedTeam(finalTeam);
       localStorage.setItem('sweepinganku:activeTeam', JSON.stringify(finalTeam));
+      if (auth.currentUser?.uid && finalTeam.teamCode) {
+        syncUserTeamToFirebase(
+          auth.currentUser.uid,
+          finalTeam.teamCode,
+          true,
+          auth.currentUser.displayName || memberNameInput.trim() || koasName,
+          auth.currentUser.email || '',
+        ).catch(() => {});
+      }
       onSwitchTeam(finalTeam, carryOver);
       onClose();
     } catch (err) { setError(friendlyTeamError(err)); }

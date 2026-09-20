@@ -3,6 +3,7 @@ import {
   collectionGroup,
   doc,
   deleteDoc,
+  getDoc,
   getDocs,
   onSnapshot,
   serverTimestamp,
@@ -10,6 +11,8 @@ import {
   setDoc,
   Unsubscribe,
   where,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getTeam } from './teamService';
@@ -83,24 +86,106 @@ export function subscribeToTeamMembers(
   );
 }
 
+/**
+ * Persists an account's joined team into users/{uid} for reliable multi-device sync.
+ */
+export async function syncUserTeamToFirebase(
+  uid: string,
+  teamCode: string,
+  isActive: boolean = false,
+  name: string = '',
+  email: string = '',
+): Promise<void> {
+  if (!uid || !teamCode) return;
+  const cleanCode = teamCode.trim().toUpperCase();
+  try {
+    const userRef = doc(db, 'users', uid);
+    const updateData: Record<string, unknown> = {
+      uid,
+      joinedTeamCodes: arrayUnion(cleanCode),
+      lastUpdated: new Date().toISOString(),
+    };
+    if (email) updateData.email = email;
+    if (name) updateData.displayName = name;
+    if (isActive) updateData.activeTeamCode = cleanCode;
+    await setDoc(userRef, updateData, { merge: true });
+
+    // Also register in teamMembers collection
+    await registerTeamMember(cleanCode, uid, name, email);
+  } catch (err) {
+    console.warn('[Firestore] Gagal menyimpan relasi tim akun ke users:', err);
+  }
+}
+
+/**
+ * Removes a team from users/{uid} and teamMembers/{teamCode}.
+ */
+export async function removeUserTeamFromFirebase(uid: string, teamCode: string): Promise<void> {
+  if (!uid || !teamCode) return;
+  const cleanCode = teamCode.trim().toUpperCase();
+  try {
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, {
+      joinedTeamCodes: arrayRemove(cleanCode),
+      lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+    await leaveTeam(cleanCode, uid);
+  } catch (err) {
+    console.warn('[Firestore] Gagal menghapus relasi tim akun dari users:', err);
+  }
+}
 
 /**
  * Rebuild the account's joined-team cache from Firebase.
- * The cache is device-local, while these membership documents are the
- * account-level source of truth shared across devices.
+ * Uses users/{uid} as primary fast source with collectionGroup as secondary discovery.
  */
 export async function syncJoinedTeamsFromFirebase(uid: string): Promise<DivisionTeam[]> {
   if (!uid) return [];
-  const membershipSnap = await getDocs(
-    query(collectionGroup(db, 'members'), where('uid', '==', uid)),
-  );
+  const foundCodes = new Set<string>();
 
-  const teamCodes = Array.from(new Set(
-    membershipSnap.docs
-      .map((item) => item.ref.parent.parent?.id?.trim().toUpperCase() || '')
-      .filter(Boolean),
-  ));
+  // 1. Read users/{uid} document directly (fast, index-free, guaranteed per-user)
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      if (Array.isArray(data?.joinedTeamCodes)) {
+        data.joinedTeamCodes.forEach((code: unknown) => {
+          if (typeof code === 'string' && code.trim()) {
+            foundCodes.add(code.trim().toUpperCase());
+          }
+        });
+      }
+      if (typeof data?.activeTeamCode === 'string' && data.activeTeamCode.trim()) {
+        foundCodes.add(data.activeTeamCode.trim().toUpperCase());
+      }
+    }
+  } catch (err) {
+    console.warn('[Firestore] Membaca users/{uid}:', err);
+  }
 
+  // 2. Also try collectionGroup for backward-compatibility
+  try {
+    const membershipSnap = await getDocs(
+      query(collectionGroup(db, 'members'), where('uid', '==', uid)),
+    );
+
+    membershipSnap.docs.forEach((item) => {
+      const parentTeam = item.ref.parent.parent?.id?.trim().toUpperCase();
+      if (parentTeam) {
+        foundCodes.add(parentTeam);
+      }
+    });
+  } catch (cgErr) {
+    if (foundCodes.size === 0) {
+      console.warn('[Firestore] collectionGroup query members:', cgErr);
+    }
+  }
+
+  if (foundCodes.size === 0) {
+    return [];
+  }
+
+  const teamCodes = Array.from(foundCodes);
   const teams = (await Promise.all(teamCodes.map((code) => getTeam(code))))
     .filter((team): team is DivisionTeam => Boolean(team?.teamCode));
 

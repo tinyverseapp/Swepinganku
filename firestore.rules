@@ -78,10 +78,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Collection-group reads used to rebuild an account's joined-team cache
     // on a new device. A user can only discover their own membership records.
-    match /{path=**}/members/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+    match /{path=**}/members/{docId} {
+      allow read: if request.auth != null && (resource.data.uid == request.auth.uid || request.auth.uid == docId);
     }
 
     match /teamMembers/{teamCode}/members/{uid} {

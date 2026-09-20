@@ -148,6 +148,46 @@
         }
       },
       "required": ["uid", "name", "email"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil dan daftar tim yang diikuti akun pengguna untuk sinkronisasi antar perangkat",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "ID unik pengguna Firebase Auth",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "Alamat email pengguna",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Nama tampilan pengguna",
+          "maxLength": 200
+        },
+        "joinedTeamCodes": {
+          "type": "array",
+          "description": "Daftar kode tim yang diikuti akun pengguna",
+          "items": {
+            "type": "string"
+          }
+        },
+        "activeTeamCode": {
+          "type": "string",
+          "description": "Kode tim yang sedang aktif dipilih",
+          "maxLength": 50
+        },
+        "lastUpdated": {
+          "type": "string",
+          "description": "Waktu pembaruan terakhir format ISO string",
+          "maxLength": 50
+        }
+      },
+      "required": ["uid"]
     }
   },
   "firestore": {
@@ -162,6 +202,10 @@
     "/teamMembers/{teamCode}/members/{uid}": {
       "schema": "#/entities/TeamMember",
       "description": "Daftar kehadiran dan anggota aktif per tim divisi"
+    },
+    "/users/{uid}": {
+      "schema": "#/entities/UserProfile",
+      "description": "Profil akun pengguna dan sinkronisasi tim yang diikuti antar perangkat"
     }
   }
 }
