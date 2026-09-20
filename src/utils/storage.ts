@@ -69,6 +69,55 @@ export interface WeekDayInfo { dayName:'Senin'|'Selasa'|'Rabu'|'Kamis'|'Jumat'|'
 export function getWeekDays(referenceDate:string, selectedDate:string):WeekDayInfo[]{ const d=parseDateSafely(referenceDate); const day=d.getDay(); const diffToMonday=day===0?-6:1-day; const monday=new Date(d.getFullYear(),d.getMonth(),d.getDate()+diffToMonday); const dayNames:Array<WeekDayInfo['dayName']>=['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu']; const shortNames=['Sen','Sel','Rab','Kam','Jum','Sab','Min']; const todayStr=today(); const selDate=selectedDate?formatDateIso(parseDateSafely(selectedDate)):todayStr; return dayNames.map((name,i)=>{const cur=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+i); const dateStr=formatDateIso(cur); let monthName='Bln'; try{monthName=cur.toLocaleDateString('id-ID',{month:'short'});}catch{monthName=String(cur.getMonth()+1);} return {dayName:name,shortName:shortNames[i],date:dateStr,dayOfMonth:cur.getDate(),monthName,isToday:dateStr===todayStr,isSelected:dateStr===selDate};}); }
 export function shiftDateByDays(dateStr:string,days:number):string{const d=parseDateSafely(dateStr);return formatDateIso(new Date(d.getFullYear(),d.getMonth(),d.getDate()+days));}
 export function formatIndonesianDate(dateStr:string,options?:Intl.DateTimeFormatOptions):string{if(!dateStr)return '';try{return parseDateSafely(dateStr).toLocaleDateString('id-ID',options||{day:'2-digit',month:'long',year:'numeric'});}catch{return dateStr;}}
+
+export function getDayDifference(fromDate?: string | null, toDate?: string | null): number {
+  if (!fromDate || !toDate) return 0;
+  const d1 = parseDateSafely(fromDate);
+  const d2 = parseDateSafely(toDate);
+  const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  return Math.round((utc2 - utc1) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Regex untuk mendeteksi POD (Post Operative Day) dalam teks diagnosis:
+ * Mendukung variasi: POD 1, POD-1, POD: 1, POD.1, POD ke-1, POD1, Post Op Day 1, dsb.
+ */
+export const POD_REGEX = /\b(POD|Post[\s\-_]*Op(?:erative)?[\s\-_]*Day)([\s\-:.]*(?:ke[\s\-:.]*)?)(\d+)\b/gi;
+
+export function hasPodInDiagnosis(dx?: string | null): boolean {
+  if (!dx || typeof dx !== 'string') return false;
+  return /\b(POD|Post[\s\-_]*Op(?:erative)?[\s\-_]*Day)([\s\-:.]*(?:ke[\s\-:.]*)?)(\d+)\b/i.test(dx);
+}
+
+export function extractPodNumber(dx?: string | null): number | null {
+  if (!dx || typeof dx !== 'string') return null;
+  const match = dx.match(/\b(POD|Post[\s\-_]*Op(?:erative)?[\s\-_]*Day)([\s\-:.]*(?:ke[\s\-:.]*)?)(\d+)\b/i);
+  if (match && match[3]) {
+    const val = parseInt(match[3], 10);
+    return isNaN(val) ? null : val;
+  }
+  return null;
+}
+
+/**
+ * Otomatis menambah nilai POD sesuai jumlah pertambahan hari (default: +1 hari).
+ * Contoh:
+ * - "CF Panfacial s/d POD 1" -> "CF Panfacial s/d POD 2"
+ * - "Post debridement (POD-1)" -> "Post debridement (POD-2)"
+ * - "POD-3 (17/09/2026)" -> "POD-4 (17/09/2026)"
+ */
+export function incrementPodInDiagnosis(dx: string | null | undefined, daysToAdd: number = 1): string {
+  if (!dx || typeof dx !== 'string') return dx || '';
+  if (daysToAdd === 0) return dx;
+
+  return dx.replace(/\b(POD|Post[\s\-_]*Op(?:erative)?[\s\-_]*Day)([\s\-:.]*(?:ke[\s\-:.]*)?)(\d+)\b/gi, (match, prefix, sep, numStr) => {
+    const currentNum = parseInt(numStr, 10);
+    if (isNaN(currentNum)) return match;
+    const nextNum = Math.max(0, currentNum + daysToAdd);
+    return `${prefix}${sep}${nextNum}`;
+  });
+}
 export function getDefaultTeam(division:string,koasName?:string):DivisionTeam{return {teamCode:getDefaultTeamCode(division),division,teamName:`Tim ${division}`,members:[koasName||'dr. Muda / Koas Bedah']};}
 export function getActiveTeam(defaultDivision?:string,defaultKoasName?:string):DivisionTeam{const raw=localStorage.getItem(`${KEY_PREFIX}:activeTeam`);if(raw){try{const parsed=JSON.parse(raw);if(parsed&&parsed.teamCode){if(defaultDivision&&parsed.division!==defaultDivision){parsed.division=defaultDivision;if(!parsed.teamName||parsed.teamName.startsWith('Tim '))parsed.teamName=`Tim ${defaultDivision}`;localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(parsed));}return parsed;}}catch{}}const div=defaultDivision||'Bedah Digestif & Umum';const def=getDefaultTeam(div,defaultKoasName);localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(def));return def;}
 export function setActiveTeam(team:DivisionTeam):void{localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(team));}
@@ -233,7 +282,7 @@ export async function saveTeamPatientsServer(teamCode:string,date:string,patient
 export async function joinTeamServer(teamCode:string,division:string,teamName:string,memberName:string):Promise<DivisionTeam|null>{try{const res=await fetch('/api/teams/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({teamCode,division,teamName,memberName})});if(!res.ok)return null;const data=await res.json();return data.team||null;}catch{return null;}}
 export async function fetchTeamInfoServer(teamCode:string):Promise<DivisionTeam|null>{try{const res=await fetch(`/api/teams/${encodeURIComponent(teamCode)}`);if(!res.ok)return null;const data=await res.json();return data||null;}catch{return null;}}
 export async function handoverPatientsServer(teamCode:string,fromDate:string,toDate:string):Promise<{success:boolean;addedCount:number;patients:Patient[]}|null>{try{const res=await fetch(`/api/teams/${encodeURIComponent(teamCode)}/handover`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fromDate,toDate})});if(!res.ok)return null;return await res.json();}catch{return null;}}
-export function handoverPatientsLocal(teamCode:string,division:string,fromDate:string,toDate:string):{addedCount:number;patients:Patient[]}{const sourcePatients=loadPatients(fromDate,division,teamCode),targetPatients=loadPatients(toDate,division,teamCode);let addedCount=0;const merged=[...targetPatients];const fromWeek=getWeekDays(fromDate,fromDate)[0]?.date||fromDate;const toWeek=getWeekDays(toDate,toDate)[0]?.date||toDate;const isCrossWeek=fromWeek!==toWeek;for(const sp of sourcePatients){if(!merged.some(tp=>tp.rm===sp.rm)){const nextWeeklyStatus=isCrossWeek?'lama':(sp.weeklyStatus||'lama');const nextAdmissionDate=isCrossWeek?(sp.admissionDate||sp.date||fromDate):(sp.admissionDate||sp.date||fromDate);merged.push({...sp,id:`handover-${Date.now()}-${Math.random().toString(36).substr(2,6)}`,presenceStatus:'belum_periksa',weeklyStatus:nextWeeklyStatus,admissionDate:nextAdmissionDate,updatedAt:new Date().toISOString()});addedCount++;}}savePatients(toDate,division,merged,teamCode);return {addedCount,patients:merged};}
+export function handoverPatientsLocal(teamCode:string,division:string,fromDate:string,toDate:string):{addedCount:number;patients:Patient[]}{const sourcePatients=loadPatients(fromDate,division,teamCode),targetPatients=loadPatients(toDate,division,teamCode);let addedCount=0;const merged=[...targetPatients];const fromWeek=getWeekDays(fromDate,fromDate)[0]?.date||fromDate;const toWeek=getWeekDays(toDate,toDate)[0]?.date||toDate;const isCrossWeek=fromWeek!==toWeek;const diffDays=Math.max(1,getDayDifference(fromDate,toDate));for(const sp of sourcePatients){if(!merged.some(tp=>tp.rm===sp.rm)){const nextWeeklyStatus=isCrossWeek?'lama':(sp.weeklyStatus||'lama');const nextAdmissionDate=isCrossWeek?(sp.admissionDate||sp.date||fromDate):(sp.admissionDate||sp.date||fromDate);const nextDx=incrementPodInDiagnosis(sp.dx,diffDays);merged.push({...sp,id:`handover-${Date.now()}-${Math.random().toString(36).substr(2,6)}`,dx:nextDx,presenceStatus:'belum_periksa',weeklyStatus:nextWeeklyStatus,admissionDate:nextAdmissionDate,updatedAt:new Date().toISOString()});addedCount++;}}savePatients(toDate,division,merged,teamCode);return {addedCount,patients:merged};}
 export function getKoasName():string{return localStorage.getItem(`${KEY_PREFIX}:koasName`)||'dr. Muda / Koas Bedah';}
 export function setKoasName(name:string):void{localStorage.setItem(`${KEY_PREFIX}:koasName`,name);}
 export function getCompactMode():boolean{try{return localStorage.getItem(`${KEY_PREFIX}:compactMode`)==='true';}catch{return false;}}

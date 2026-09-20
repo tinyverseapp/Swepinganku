@@ -1,6 +1,6 @@
 import { Patient } from '../types';
 import { isBedRoom, formatKamarOrBed } from '../data/constants';
-import { formatDateDMY } from '../utils/storage';
+import { formatDateDMY, hasPodInDiagnosis, extractPodNumber } from '../utils/storage';
 import { Edit2, Trash2, Stethoscope, Share2, CalendarDays, Building2 } from 'lucide-react';
 
 interface PatientCardProps {
@@ -125,7 +125,14 @@ export function PatientCard({ patient, onEdit, onDelete, onTogglePresence, onTog
             <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide bg-slate-100 text-slate-600 border border-slate-200 rounded-md px-1.5 py-0.5">{roleLabel}</span>
           </div>
           {patient.supervisingDpjp && <div className={`text-slate-600 bg-amber-50 border border-amber-100 rounded-lg leading-snug ${isCompact ? 'px-1.5 py-1 text-[10px]' : 'px-2 py-1.5 text-[11px]'}`} title="DPJP utama dari luar divisi; hanya sebagai catatan tambahan"><span className="font-bold text-amber-800">DPJP Utama:</span> {patient.supervisingDpjp}</div>}
-          <div className={`text-slate-800 font-normal bg-slate-50 border border-slate-100 rounded-lg leading-relaxed whitespace-pre-wrap ${isCompact ? 'p-1.5 text-[10.5px] line-clamp-2 hover:line-clamp-none transition-all' : 'p-2.5 text-[11px]'}`}>{patient.dx || 'Diagnosis klinis belum diisi.'}</div>
+          <div className={`text-slate-800 font-normal bg-slate-50 border border-slate-100 rounded-lg leading-relaxed whitespace-pre-wrap ${isCompact ? 'p-1.5 text-[10.5px] line-clamp-2 hover:line-clamp-none transition-all' : 'p-2.5 text-[11px]'}`}>
+            {hasPodInDiagnosis(patient.dx) && (
+              <span className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-100/90 border border-indigo-300 rounded px-1.5 py-0.2 mr-1.5 align-middle text-[10px] select-none shadow-2xs" title="Hari Pasca Operasi (Post Operative Day)">
+                <span>POD {extractPodNumber(patient.dx) ?? ''}</span>
+              </span>
+            )}
+            {patient.dx || 'Diagnosis klinis belum diisi.'}
+          </div>
         </div>
       </div>
 

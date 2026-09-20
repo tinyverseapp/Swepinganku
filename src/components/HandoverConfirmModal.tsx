@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { GitPullRequest, ArrowRight, Calendar, Users, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { formatIndonesianDate, shiftDateByDays, loadPatients } from '../utils/storage';
+import { formatIndonesianDate, shiftDateByDays, loadPatients, hasPodInDiagnosis } from '../utils/storage';
 
 interface HandoverConfirmModalProps {
   isOpen: boolean;
@@ -72,10 +72,16 @@ export function HandoverConfirmModal({
       return !rm || !currentRms.has(rm);
     }).length;
     const existingCount = yesterdayPatients.length - newCount;
+    const podCount = yesterdayPatients.filter((p) => {
+      const rm = (p.rm || '').trim().toLowerCase();
+      const isNew = !rm || !currentRms.has(rm);
+      return isNew && hasPodInDiagnosis(p.dx);
+    }).length;
     return {
       totalYesterday: yesterdayPatients.length,
       newCount,
-      existingCount
+      existingCount,
+      podCount
     };
   }, [yesterdayPatients, currentPatients]);
 
@@ -191,6 +197,18 @@ export function HandoverConfirmModal({
             </div>
           )}
         </div>
+
+        {stats.podCount > 0 && (
+          <div className="mt-3 p-3 bg-indigo-50/90 border border-indigo-200/80 rounded-xl flex items-start gap-2.5 text-xs text-indigo-900 leading-relaxed shadow-2xs">
+            <span className="text-base leading-none shrink-0 mt-0.5">⚡</span>
+            <div>
+              <p className="font-bold text-indigo-950">Otomatis Update POD (Post Operative Day)</p>
+              <p className="text-[11px] text-indigo-800 mt-0.5">
+                Ditemukan <strong>{stats.podCount} pasien</strong> dengan catatan POD. Nilai hari operasi akan otomatis bertambah <strong>+1 hari</strong> saat disalin ke hari ini (misal: POD 1 → POD 2).
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 flex items-center justify-end gap-2.5">
           <button

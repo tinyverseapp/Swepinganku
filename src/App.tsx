@@ -12,7 +12,9 @@ import {
   handoverYesterdayPatients,
   getStorageKey,
   isRemovedDoctor,
-  cleanRemovedDoctorsFromStorage
+  cleanRemovedDoctorsFromStorage,
+  getDayDifference,
+  incrementPodInDiagnosis
 } from './utils/storage';
 import { getSavedActiveTeam, loadJoinedTeams, saveJoinedTeam } from './utils/teamRegistry';
 import { subscribeToPatients, savePatientsBatch, deletePatientFromFirestore, deleteAllPatientsForDateFromFirestore, upsertPatientToFirestore, upsertPatientsToFirestore, movePatientToDateFirestore, migrateDoctorNamesInFirestore } from './lib/firestoreService';
@@ -262,12 +264,14 @@ export default function App() {
       return patientRm && targetRm === patientRm;
     });
     if (duplicate) { showToast(`Pasien dengan No. RM ${patient.rm || '-'} sudah ada pada ${targetDate}.`); return; }
-    const movedPatient: Patient = { ...patient, presenceStatus: 'belum_periksa', teamCode: activeTeam.teamCode, date: targetDate, division, updatedAt: new Date().toISOString() };
+    const diffDays = getDayDifference(date, targetDate);
+    const updatedDx = diffDays !== 0 ? incrementPodInDiagnosis(patient.dx, diffDays) : (patient.dx || '');
+    const movedPatient: Patient = { ...patient, dx: updatedDx, presenceStatus: 'belum_periksa', teamCode: activeTeam.teamCode, date: targetDate, division, updatedAt: new Date().toISOString() };
     const sourceUpdated = patients.filter((p) => p.id !== patient.id);
     const targetUpdated = [movedPatient, ...targetPatients];
     setPatients(sourceUpdated); savePatients(date, division, sourceUpdated, activeTeam.teamCode); savePatients(targetDate, division, targetUpdated, activeTeam.teamCode); setMovingPatient(null);
     if (activeTeam.teamCode) {
-      try { await movePatientToDateFirestore(patient, activeTeam.teamCode, date, targetDate); showToast(`${patient.name} dipindahkan ke ${targetDate} dan tersinkron ke Firebase.`); }
+      try { await movePatientToDateFirestore(movedPatient, activeTeam.teamCode, date, targetDate); showToast(`${patient.name} dipindahkan ke ${targetDate} dan tersinkron ke Firebase.`); }
       catch (error: any) { setPatients(patients); savePatients(date, division, patients, activeTeam.teamCode); savePatients(targetDate, division, targetPatients, activeTeam.teamCode); showToast(`Gagal memindahkan pasien: ${error?.message || 'sinkronisasi Firebase gagal.'}`); }
     } else showToast(`${patient.name} dipindahkan ke ${targetDate}.`);
   };
@@ -299,7 +303,30 @@ export default function App() {
   };
   const handleCopyFromDay = (fromDate: string, dayName: string) => {
     const raw = localStorage.getItem(getStorageKey(fromDate, division, activeTeam.teamCode)); if (!raw) { showToast(`Data pada hari ${dayName} (${fromDate}) masih kosong.`); return; }
-    try { const sourcePatients: Patient[] = JSON.parse(raw); const currentRms = new Set(patients.map((p) => p.rm.trim().toLowerCase())); const toAdd = sourcePatients.filter((p) => !currentRms.has(p.rm.trim().toLowerCase())).map((p) => ({ ...p, id: `pt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, teamCode: activeTeam.teamCode, date, division, presenceStatus: 'belum_periksa' as const, updatedAt: new Date().toISOString() })); if (!toAdd.length) { showToast(`Semua pasien dari hari ${dayName} sudah ada.`); return; } const merged = [...patients, ...toAdd]; setPatients(merged); savePatients(date, division, merged, activeTeam.teamCode); savePatientsBatch(activeTeam.teamCode, date, merged).then(() => showToast(`Berhasil menyalin ${toAdd.length} pasien dan sinkron ke Firebase.`)).catch((error) => showToast(`Data disalin lokal, tetapi Firebase gagal: ${error.message}`)); } catch { showToast('Gagal memproses data salinan.'); }
+    try {
+      const sourcePatients: Patient[] = JSON.parse(raw);
+      const currentRms = new Set(patients.map((p) => p.rm.trim().toLowerCase()));
+      const diffDays = Math.max(1, getDayDifference(fromDate, date));
+      const toAdd = sourcePatients
+        .filter((p) => !currentRms.has(p.rm.trim().toLowerCase()))
+        .map((p) => ({
+          ...p,
+          id: `pt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          teamCode: activeTeam.teamCode,
+          date,
+          division,
+          dx: incrementPodInDiagnosis(p.dx, diffDays),
+          presenceStatus: 'belum_periksa' as const,
+          updatedAt: new Date().toISOString()
+        }));
+      if (!toAdd.length) { showToast(`Semua pasien dari hari ${dayName} sudah ada.`); return; }
+      const merged = [...patients, ...toAdd];
+      setPatients(merged);
+      savePatients(date, division, merged, activeTeam.teamCode);
+      savePatientsBatch(activeTeam.teamCode, date, merged)
+        .then(() => showToast(`Berhasil menyalin ${toAdd.length} pasien dan sinkron ke Firebase.`))
+        .catch((error) => showToast(`Data disalin lokal, tetapi Firebase gagal: ${error.message}`));
+    } catch { showToast('Gagal memproses data salinan.'); }
   };
 
   // AI import is remote-first. The previous implementation wrote the merged local

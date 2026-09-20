@@ -10,7 +10,7 @@ import {
   parseAgeInYears,
   formatPatientNameWithHonorific
 } from '../data/constants';
-import { calculateAgeFromDob, formatDateDMY } from '../utils/storage';
+import { calculateAgeFromDob, formatDateDMY, hasPodInDiagnosis, extractPodNumber, incrementPodInDiagnosis } from '../utils/storage';
 import { X, UserPlus, Save, Sparkles } from 'lucide-react';
 
 interface PatientModalProps {
@@ -318,8 +318,60 @@ export function PatientModal({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block font-bold text-slate-700 mb-1">Diagnosis Klinis, Tindakan Operasi &amp; Catatan Khusus</label>
-              <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post Appendectomy Laparoskopi H+1, drain minimal kemerahan, flatus (+), diet bubur halus..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all leading-relaxed" />
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-bold text-slate-700">Diagnosis Klinis, Tindakan Operasi &amp; Catatan Khusus</label>
+                {hasPodInDiagnosis(dx) && (
+                  <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                    Auto-POD Aktif (+1/hari)
+                  </span>
+                )}
+              </div>
+              <textarea rows={3} value={dx} onChange={(e) => setDx(e.target.value)} placeholder="Contoh: Post debridement + ORIF POD-1 a/i Fr. Maxilla le fort 2..." className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all leading-relaxed" />
+              
+              {/* POD Smart Helper */}
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                {hasPodInDiagnosis(dx) ? (
+                  <div className="flex items-center gap-1.5 text-indigo-900 bg-indigo-50/70 border border-indigo-200/80 px-2.5 py-1 rounded-lg w-full sm:w-auto">
+                    <span className="text-xs">⚡</span>
+                    <span className="text-[11px] font-medium">
+                      Terdeteksi <b>POD {extractPodNumber(dx) ?? ''}</b> — Otomatis bertambah +1 hari saat dioper ke hari berikutnya.
+                    </span>
+                    <div className="ml-auto flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setDx(prev => incrementPodInDiagnosis(prev, -1))}
+                        className="px-1.5 py-0.5 text-[10px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded cursor-pointer transition-colors"
+                        title="Kurangi 1 hari POD"
+                      >
+                        -1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDx(prev => incrementPodInDiagnosis(prev, 1))}
+                        className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded cursor-pointer transition-colors shadow-2xs"
+                        title="Tambah 1 hari POD"
+                      >
+                        +1
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <span className="font-medium text-slate-600">Sisipkan POD:</span>
+                    {['POD-0', 'POD-1', 'POD-2', 'POD-3'].map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setDx(prev => (prev && prev.trim() ? `${prev.trim()} ${item}` : item))}
+                        className="px-2 py-0.5 text-[10.5px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-600 border border-slate-200 rounded-md transition-all cursor-pointer"
+                      >
+                        + {item}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Klasifikasi Status Pasien Mingguan & Tanggal Masuk */}
