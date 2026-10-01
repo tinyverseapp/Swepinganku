@@ -4,6 +4,77 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import 'dotenv/config';
 
+function normalizeDob(raw?: any): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let str = raw.trim();
+  str = str.replace(/^(dob|ttl|tgl\s*lahir|tanggal\s*lahir|lahir)\s*[:=\s\-]+/i, '').trim();
+  if (!str) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  const monthMap: Record<string, string> = {
+    jan: '01', januari: '01', january: '01',
+    feb: '02', februari: '02', february: '02',
+    mar: '03', maret: '03', march: '03',
+    apr: '04', april: '04',
+    mei: '05', may: '05',
+    jun: '06', juni: '06', june: '06',
+    jul: '07', juli: '07', july: '07',
+    agu: '08', agt: '08', agustus: '08', aug: '08', august: '08',
+    sep: '09', september: '09',
+    okt: '10', oktober: '10', oct: '10', october: '10',
+    nov: '11', november: '11',
+    des: '12', desember: '12', dec: '12', december: '12',
+  };
+
+  const textMonthMatch = str.match(/^(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{4})$/);
+  if (textMonthMatch) {
+    const d = textMonthMatch[1].padStart(2, '0');
+    const mStr = textMonthMatch[2].toLowerCase();
+    const m = monthMap[mStr];
+    const y = textMonthMatch[3];
+    if (m) return `${y}-${m}-${d}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  const dmyShortMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  if (dmyShortMatch) {
+    const d = dmyShortMatch[1].padStart(2, '0');
+    const m = dmyShortMatch[2].padStart(2, '0');
+    const yr = parseInt(dmyShortMatch[3], 10);
+    const curYrShort = new Date().getFullYear() % 100;
+    const y = yr <= curYrShort ? 2000 + yr : 1900 + yr;
+    return `${y}-${m}-${d}`;
+  }
+
+  const ymdMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, '0');
+    const d = ymdMatch[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 1900 && parsed.getFullYear() <= new Date().getFullYear() + 1) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return '';
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -27,7 +98,7 @@ async function startServer() {
   // API endpoint for AI Patient Parser
   app.post("/api/ai/parse-patients", async (req, res) => {
     try {
-      const { text, division, knownRooms, knownDpjps, knownPediatricDpjps } = req.body;
+      const { text, division, knownRooms, knownDpjps, knownPediatricDpjps, allDivisionsDoctors } = req.body;
       if (!text || typeof text !== 'string' || !text.trim()) {
         return res.status(400).json({
           success: false,
@@ -46,29 +117,67 @@ async function startServer() {
       const surgicalDoctors = Array.isArray(knownDpjps) ? knownDpjps.filter(Boolean) : [];
       const pediatricDoctors = Array.isArray(knownPediatricDpjps) ? knownPediatricDpjps.filter(Boolean) : [];
 
+      const fallbackDivisions: Record<string, string[]> = {
+        'Bedah Digestif & Umum': ['dr. Bambang Suprapto, Sp. B(K)BD', 'dr. Ahmad Toboroni Nasution, Sp. B(K)BD'],
+        'Bedah Anak': ['dr. Santi Rini., Sp.BA., Subsp.DA(K)', 'dr. Fahad Ahmed Shah K., Sp.BA'],
+        'Bedah Plastik': ['dr. Andi Mohammad Ardan, Sp. BP-RE', 'dr. Yudhy Arius, Sp. BP-RE'],
+        'Bedah Onkologi': ['dr. Zainal Abidin, SpB.SubSp.Onk.(K).,MARS.,SH.,MH', 'dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
+        'Urologi': ['dr. Poppy Desra Syahfitri Nasution, Sp.U', 'dr. Made Adi Wiratama, Sp.U', 'dr. Muhammad Rozaqy Ishaq, Sp.U', 'dr. Boyke Soebhali, Sp.U(K)', 'dr. Ricky Agave Ompusunggu, Sp.U'],
+        'BTKV': ['dr. Ivan Joalsen Mangara Tua, Sp.BTKV', 'dr. Michael Caesario, Sp.BTKV(K)', 'dr. Ery Irawan, Sp.BTKV', 'dr. David Hermawan Christian, Sp.BTKV'],
+        'Ortopedi': ['dr. Yasser Ridwan, Sp.OT, K-Spine, FICS', 'dr. Hendri Purnama, Sp.OT, K-Hip&Knee', 'dr. Fahroni C. Winata, Sp.OT', 'dr. Achmad Fachrizal, Sp.OT'],
+        'Bedah Saraf': ['dr. Dini Heryani, Sp.BS', 'dr. Taufiq Fatchur Rochman, Sp.BS']
+      };
+      const divisionMap = (allDivisionsDoctors && typeof allDivisionsDoctors === 'object') ? allDivisionsDoctors : fallbackDivisions;
+
+      const otherDivisionsListText = Object.entries(divisionMap)
+        .map(([divName, docs]) => `- ${divName}: ${(Array.isArray(docs) ? docs : []).join('; ')}`)
+        .join('\n');
+
       const prompt = `Anda adalah asisten medis koas bedah berpengalaman.
 Tugas Anda adalah membaca dan mengekstrak catatan pasien dari berbagai format teks mentah bebas (catatan operan jaga WhatsApp, catatan ronde bangsal, resume stase sebelumnya, atau format bebas) menjadi format data pasien terstruktur yang bersih.
 
-KONSEP KLINIS WAJIB:
+KONSEP KLINIS WAJIB & ATURAN DPJP / RABER / KONSUL:
 - DPJP = Dokter Penanggung Jawab Pelayanan. Ini adalah dokter utama yang bertanggung jawab atas pelayanan pasien. Jika catatan menyebut "DPJP", "DPJP utama", "dokter penanggung jawab", atau padanan yang jelas, dokter tersebut adalah DPJP.
-- RABER = Rawat Bersama. Dokter dari bidang lain ikut merawat pasien bersama DPJP utama. Dokter RABER BUKAN DPJP utama hanya karena ia dokter bedah/spesialis yang sedang menangani masalahnya.
-- KONSUL = dokter yang dimintai konsultasi. Dokter konsulen BUKAN DPJP utama kecuali teks secara eksplisit menyatakan ia juga DPJP.
-- Untuk RABER/KONSUL, field dpjp berisi NAMA DOKTER YANG BERPERAN SEBAGAI RABER/KONSUL (dokter bedah pada aplikasi), doctorRole berisi perannya ("RABER" atau "KONSUL"), dan supervisingDpjp berisi DPJP utama.
-- Untuk DPJP, field dpjp berisi dokter DPJP, doctorRole bernilai "DPJP", dan supervisingDpjp harus kosong "".
-- Spesialisasi TIDAK menentukan peran. Dokter anak bisa menjadi DPJP. Dokter bedah anak bisa menjadi RABER atau KONSUL. Jangan pernah mengubah RABER/KONSUL menjadi DPJP hanya karena dokter tersebut dari divisi aktif.
+- RABER = Rawat Bersama. Dokter dari bidang/divisi lain ikut merawat pasien bersama DPJP utama. Dokter RABER BUKAN DPJP utama.
+- KONSUL = dokter yang dimintai konsultasi klinis. Dokter konsulen BUKAN DPJP utama kecuali teks secara eksplisit menyatakan ia juga DPJP.
+- ATURAN DPJP UTAMA LINTAS DIVISI:
+  * Dokter spesialis dari DIVISI BEDAH LAIN MANA PUN (seperti Bedah Digestif, Bedah Anak, Ortopedi, Urologi, BTKV, Bedah Plastik, Bedah Onkologi, Bedah Saraf) maupun Dokter Anak/Spesialis Penyakit Dalam/dll. BISA MENJADI DPJP UTAMA.
+  * Dokter dari divisi stase aktif (${division || 'Bedah'}) bisa menjadi DPJP utama, BISA menjadi RABER, atau BISA menjadi KONSUL.
+  * Jika pasien berstatus RABER atau KONSUL:
+    - field 'dpjp': NAMA DOKTER DARI DIVISI STASE AKTIF (${division || 'Bedah'}) yang merawat/dikonsul.
+    - field 'doctorRole': "RABER" atau "KONSUL".
+    - field 'supervisingDpjp': NAMA DOKTER DPJP UTAMA (dapat berasal dari divisi bedah lain mana pun seperti Bedah Digestif, Bedah Anak, Ortopedi, Urologi, BTKV, Bedah Onkologi, Bedah Saraf, dll., maupun Dokter Anak).
+  * Jika pasien berstatus DPJP murni (divisi stase aktif sebagai DPJP utama):
+    - field 'dpjp': Nama dokter DPJP.
+    - field 'doctorRole': "DPJP".
+    - field 'supervisingDpjp': string kosong "".
 
-CONTOH WAJIB:
-1) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. RABER: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="RABER", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
-2) "DPJP dokter anak, rawat bersama dengan dr. Santi Rini Sp.BA" => supervisingDpjp="dokter anak"; dpjp="dr. Santi Rini, Sp.BA"; doctorRole="RABER".
-3) "DPJP: dr. Ahmad Wisnu Wardhana, Sp.A. Konsul Bedah Anak ke dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="KONSUL", supervisingDpjp="dr. Ahmad Wisnu Wardhana, Sp.A".
-4) "DPJP: dr. Santi Rini, Sp.BA" => dpjp="dr. Santi Rini, Sp.BA", doctorRole="DPJP", supervisingDpjp="".
-5) "dr. Santi Rini Sp.BA" tanpa keterangan peran => JANGAN menebak DPJP/RABER/KONSUL dari spesialisasinya. doctorRole boleh kosong "" dan field dokter hanya diisi bila hubungan tanggung jawab memang jelas.
+CONTOH WAJIB LINTAS DIVISI:
+1) Kasus Raber antar-divisi bedah (misal stase aktif Bedah Plastik, DPJP utama Bedah Digestif):
+   "DPJP: dr. Bambang Suprapto, Sp. B(K)BD. RABER Bedah Plastik: dr. Andi Mohammad Ardan, Sp. BP-RE"
+   => dpjp="dr. Andi Mohammad Ardan, Sp. BP-RE", doctorRole="RABER", supervisingDpjp="dr. Bambang Suprapto, Sp. B(K)BD".
+2) Kasus Konsul antar-divisi bedah (misal stase aktif Bedah Plastik, DPJP utama Bedah Anak):
+   "DPJP: dr. Fahad Ahmed Shah K., Sp.BA. Konsul ke dr. Yudhy Arius, Sp. BP-RE"
+   => dpjp="dr. Yudhy Arius, Sp. BP-RE", doctorRole="KONSUL", supervisingDpjp="dr. Fahad Ahmed Shah K., Sp.BA".
+3) Kasus Raber antar-divisi bedah (misal stase aktif Bedah Digestif, DPJP utama Ortopedi):
+   "DPJP: dr. Yasser Ridwan, Sp.OT. Raber: dr. Ahmad Toboroni Nasution, Sp. B(K)BD"
+   => dpjp="dr. Ahmad Toboroni Nasution, Sp. B(K)BD", doctorRole="RABER", supervisingDpjp="dr. Yasser Ridwan, Sp.OT, K-Spine, FICS".
+4) Kasus Raber dengan Dokter Anak (Pediatri):
+   "DPJP: dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A. RABER: dr. Santi Rini, Sp.BA"
+   => dpjp="dr. Santi Rini, Sp.BA", doctorRole="RABER", supervisingDpjp="dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A".
+5) Kasus DPJP divisi stase aktif:
+   "DPJP: dr. Andi Mohammad Ardan, Sp. BP-RE"
+   => dpjp="dr. Andi Mohammad Ardan, Sp. BP-RE", doctorRole="DPJP", supervisingDpjp="".
+6) Jika tertulis "DPJP: dr. A, Raber: dr. B" di mana dr. B adalah dokter divisi stase aktif (${division || 'Bedah'}), maka dr. B = dpjp (doctorRole="RABER") dan dr. A = supervisingDpjp (DPJP utama).
 
 DIVISI STASE AKTIF: ${division || 'Bedah'}
-DAFTAR DOKTER BEDAH / DPJP ACUAN:
+DOKTER DIVISI STASE AKTIF / DPJP ACUAN:
 ${surgicalDoctors.length > 0 ? surgicalDoctors.join('\n') : '-'}
 
-DAFTAR DOKTER ANAK KONSULEN / RUJUKAN ACUAN:
+DOKTER DIVISI BEDAH LAIN (DAPAT MENJADI DPJP UTAMA MAUPUN RABER/KONSUL):
+${otherDivisionsListText}
+
+DAFTAR DOKTER ANAK KONSULEN / RUJUKAN ACUAN (DAPAT MENJADI DPJP UTAMA):
 ${pediatricDoctors.length > 0 ? pediatricDoctors.join('\n') : '-'}
 
 DAFTAR RUANGAN / BANGSAL ACUAN:
@@ -77,7 +186,7 @@ ${Array.isArray(knownRooms) && knownRooms.length > 0 ? knownRooms.join(', ') : '
 ATURAN STRUKTUR DATA (SANGAT KETAT):
 1. name: Nama pasien. Pertahankan sebutan jika ada (Tn, Ny, An, By, dsb. Contoh: "Tn. Sutrisno", "Ny. Siti Aminah", "An. Rafa", "By. Ny. Rahma"). Jika pasien berusia kurang dari 1 bulan gunakan "By." (misal: "By. Dania").
 2. age: Usia pasien dalam format singkat (misal: "45 th", "8 bln", "2 th", "60"). Jika tidak tertera, gunakan string kosong "".
-3. dob: Tanggal lahir pasien (DOB) dalam format YYYY-MM-DD jika ada (misal: "2023-05-12", "12/05/2020" dikonversi ke YYYY-MM-DD). Jika tidak ada, gunakan string kosong "".
+3. dob: Tanggal lahir pasien (DOB / Tgl Lahir / TTL / Lahir) jika ada dalam teks catatan. Konversikan SELALU ke format 'YYYY-MM-DD' (contoh: "DOB: 12/05/2023" -> "2023-05-12", "12-05-2023" -> "2023-05-12", "12 Mei 2023" -> "2023-05-12", "2023-05-12" -> "2023-05-12"). Jika tidak ada di teks, gunakan string kosong "".
 4. jk: Jenis kelamin pasien: 'L' (Laki-laki), 'P' (Perempuan), atau string kosong "".
 5. rm: Nomor Rekam Medis jika ada (misal: "01-88-29", "020918"). Jika tidak ada, gunakan string kosong "".
 6. room: Nama ruangan / bangsal sesuai teks atau kecocokan terdekat.
@@ -165,9 +274,11 @@ ${text}
         const jk = p.jk === 'P' || p.jk === 'L' ? p.jk : '';
         const doctorRole = p.doctorRole === 'RABER' || p.doctorRole === 'KONSUL' || p.doctorRole === 'DPJP' ? p.doctorRole : undefined;
         const supervisingDpjp = String(p.supervisingDpjp || '').trim() || undefined;
+        const dob = normalizeDob(p.dob);
         return {
           name: String(p.name || '').trim(),
           age: String(p.age || '').trim(),
+          ...(dob ? { dob } : {}),
           jk,
           rm: String(p.rm || '').trim(),
           room: String(p.room || '').trim(),

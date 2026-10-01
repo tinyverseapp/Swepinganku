@@ -3,6 +3,8 @@ import { Patient } from '../types';
 import {
   MASTER_ROOMS,
   PEDIATRIC_CONSULTANTS,
+  getAllSupervisingDoctors,
+  getSupervisingDoctorsByDivision,
   isBedRoom,
   normalizeRoomName,
   formatKamarOrBed,
@@ -52,6 +54,7 @@ export function PatientModal({
   const [presenceStatus, setPresenceStatus] = useState<Patient['presenceStatus']>('belum_periksa');
   const [weeklyStatus, setWeeklyStatus] = useState<Patient['weeklyStatus']>('baru');
   const [admissionDate, setAdmissionDate] = useState('');
+  const [supervisingDivisionFilter, setSupervisingDivisionFilter] = useState<string>('all');
 
   useEffect(() => {
     if (initialData) {
@@ -114,7 +117,8 @@ export function PatientModal({
   const currentRoomName = isCustomRoom ? (customRoomName.trim() || 'Ruangan Khusus') : selectedRoom;
   const isCurrentBed = isBedRoom(currentRoomName);
   const needsSupervisingDpjp = doctorRole === 'RABER' || doctorRole === 'KONSUL';
-  const supervisingDpjpOptions = Array.from(new Set([...(existingDpjps || []), ...PEDIATRIC_CONSULTANTS]));
+  const supervisingDoctorsByDiv = getSupervisingDoctorsByDivision();
+  const supervisingDpjpOptions = Array.from(new Set(getAllSupervisingDoctors(existingDpjps)));
 
   const handleDobChange = (val: string) => {
     setDob(val);
@@ -217,24 +221,98 @@ export function PatientModal({
               )}
 
               {needsSupervisingDpjp && (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-                  <label className="block font-bold text-amber-900 mb-1">Nama Dokter DPJP *</label>
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <label className="block font-bold text-amber-900 text-xs sm:text-sm">Nama Dokter DPJP Utama *</label>
+                    <span className="text-[10px] bg-amber-200/90 text-amber-950 px-2 py-0.5 rounded font-bold">Semua Divisi &amp; Anak</span>
+                  </div>
                   <input
                     type="text"
                     required
                     list="supervisingDpjpDatalist"
                     value={supervisingDpjp}
                     onChange={(e) => setSupervisingDpjp(e.target.value)}
-                    placeholder="Pilih dokter DPJP, misalnya dokter anak atau dokter bedah"
-                    className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
+                    placeholder="Pilih atau ketik nama DPJP utama dari divisi bedah lain atau dokter anak..."
+                    className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-medium"
                   />
-                  <p className="text-[10px] text-amber-800 mt-1">Wajib diisi karena dokter di atas berperan sebagai <b>{doctorRole === 'RABER' ? 'Raber' : 'Konsul'}</b>, bukan DPJP utama pasien.</p>
-                  <datalist id="supervisingDpjpDatalist">{supervisingDpjpOptions.map((d) => <option key={`supervising-${d}`} value={d} />)}</datalist>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] text-slate-600 font-semibold">Dokter Anak:</span>
-                    {PEDIATRIC_CONSULTANTS.map((c) => (
-                      <button key={`pediatric-${c}`} type="button" onClick={() => setSupervisingDpjp(c)} className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md px-1.5 py-0.5 font-semibold transition-colors cursor-pointer" title={`Pilih ${c} sebagai DPJP utama`}>+ {c.replace(/^dr\.\s*/i, '').split(',')[0]}</button>
+                  <p className="text-[10px] text-amber-800 leading-snug">
+                    Wajib diisi karena dokter di atas berperan sebagai <b>{doctorRole === 'RABER' ? 'Raber' : 'Konsul'}</b>. DPJP utama dapat berasal dari <b>seluruh divisi bedah lain</b> (Digestif, Bedah Anak, Plastik, Onkologi, Urologi, Ortopedi, Bedah Saraf, BTKV) maupun <b>Dokter Anak</b>.
+                  </p>
+                  <datalist id="supervisingDpjpDatalist">
+                    {supervisingDpjpOptions.map((d) => (
+                      <option key={`supervising-${d}`} value={d} />
                     ))}
+                  </datalist>
+
+                  {/* Filter & Pilih Cepat DPJP Utama Berdasarkan Divisi */}
+                  <div className="pt-2 border-t border-amber-200/70">
+                    <div className="text-[10.5px] font-bold text-amber-900 mb-1 flex items-center justify-between flex-wrap gap-1">
+                      <span>Pilih Cepat DPJP Utama:</span>
+                      {supervisingDpjp && (
+                        <span className="text-[9.5px] font-semibold text-emerald-800 truncate max-w-[220px]" title={supervisingDpjp}>
+                          ✓ Terpilih: {supervisingDpjp.replace(/^dr\.\s*/i, '').split(',')[0]}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Filter Tab Kategori Divisi */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setSupervisingDivisionFilter('all')}
+                        className={`px-2 py-0.5 rounded-md font-bold shrink-0 transition-colors cursor-pointer ${
+                          supervisingDivisionFilter === 'all'
+                            ? 'bg-amber-700 text-white shadow-2xs'
+                            : 'bg-white/90 text-amber-900 border border-amber-300/70 hover:bg-amber-100'
+                        }`}
+                      >
+                        Semua
+                      </button>
+                      {Object.keys(supervisingDoctorsByDiv).map((divName) => (
+                        <button
+                          key={`tab-${divName}`}
+                          type="button"
+                          onClick={() => setSupervisingDivisionFilter(divName)}
+                          className={`px-2 py-0.5 rounded-md font-semibold shrink-0 transition-colors cursor-pointer ${
+                            supervisingDivisionFilter === divName
+                              ? 'bg-amber-700 text-white shadow-2xs'
+                              : 'bg-white/90 text-amber-900 border border-amber-300/70 hover:bg-amber-100'
+                          }`}
+                        >
+                          {divName}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Tombol Dokter Konsulen */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1 max-h-32 overflow-y-auto pr-0.5">
+                      {Object.entries(supervisingDoctorsByDiv)
+                        .filter(([divName]) => supervisingDivisionFilter === 'all' || supervisingDivisionFilter === divName)
+                        .flatMap(([divName, docs]) =>
+                          docs.map((c) => {
+                            const isSelected = supervisingDpjp === c;
+                            return (
+                              <button
+                                key={`supervising-btn-${divName}-${c}`}
+                                type="button"
+                                onClick={() => setSupervisingDpjp(c)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold transition-all cursor-pointer border ${
+                                  isSelected
+                                    ? 'bg-amber-700 text-white border-amber-800 shadow-2xs'
+                                    : 'bg-white hover:bg-amber-100/90 text-amber-950 border-amber-300/80'
+                                }`}
+                                title={`${c} (${divName})`}
+                              >
+                                {isSelected ? '✓ ' : '+ '}
+                                {c.replace(/^dr\.\s*/i, '').split(',')[0]}
+                                <span className="text-[8.5px] opacity-70 ml-1">
+                                  ({divName.replace('Bedah ', 'B.').replace(' & Umum', '')})
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                    </div>
                   </div>
                 </div>
               )}

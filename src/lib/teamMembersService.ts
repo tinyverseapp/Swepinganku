@@ -119,6 +119,8 @@ export async function syncUserTeamToFirebase(
 
 /**
  * Removes a team from users/{uid} and teamMembers/{teamCode}.
+ * Each step is individually guarded so that network or permission
+ * glitches on one document do not block other cleanup steps.
  */
 export async function removeUserTeamFromFirebase(
   uid: string,
@@ -128,6 +130,8 @@ export async function removeUserTeamFromFirebase(
 ): Promise<void> {
   if (!uid || !teamCode) return;
   const cleanCode = teamCode.trim().toUpperCase();
+
+  // 1. Remove team code from user's joined list
   try {
     const userRef = doc(db, 'users', uid);
     const updateData: Record<string, unknown> = {
@@ -140,20 +144,28 @@ export async function removeUserTeamFromFirebase(
       updateData.activeTeamCode = '';
     }
     await setDoc(userRef, updateData, { merge: true });
-    await leaveTeam(cleanCode, uid);
+  } catch (userErr) {
+    console.warn('[Firestore] Gagal memperbarui users/{uid} saat keluar tim:', userErr);
+  }
 
-    if (memberName?.trim()) {
-      try {
-        const tRef = doc(db, 'teams', cleanCode);
-        await setDoc(tRef, {
-          members: arrayRemove(memberName.trim()),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch {}
+  // 2. Delete member document from teamMembers/{cleanCode}/members/{uid}
+  try {
+    await leaveTeam(cleanCode, uid);
+  } catch (leaveErr) {
+    console.warn('[Firestore] Gagal menghapus teamMembers document saat keluar tim:', leaveErr);
+  }
+
+  // 3. Remove display name from teams/{cleanCode}.members array if present
+  if (memberName?.trim()) {
+    try {
+      const tRef = doc(db, 'teams', cleanCode);
+      await setDoc(tRef, {
+        members: arrayRemove(memberName.trim()),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (teamErr) {
+      console.warn('[Firestore] Gagal memperbarui daftar members di teams/{teamCode}:', teamErr);
     }
-  } catch (err) {
-    console.warn('[Firestore] Gagal menghapus relasi tim akun dari users:', err);
-    throw err;
   }
 }
 

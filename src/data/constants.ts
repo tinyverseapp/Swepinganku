@@ -4,7 +4,7 @@ export const DIVISIONS: string[] = ['Bedah Digestif & Umum','Bedah Anak','Urolog
 export const DIVISION_CONSULTANTS: Record<string, string[]> = {
   'Bedah Anak': ['dr. Santi Rini., Sp.BA., Subsp.DA(K)','dr. Fahad Ahmed Shah K., Sp.BA'],
   'Bedah Plastik': ['dr. Andi Mohammad Ardan, Sp. BP-RE','dr. Yudhy Arius, Sp. BP-RE'],
-  'Bedah Onkologi': ['dr. Zainal Abidin, Sp.B, SubSp.Onk(K), MARS, MH.Kes','dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
+  'Bedah Onkologi': ['dr. Zainal Abidin, SpB.SubSp.Onk.(K).,MARS.,SH.,MH','dr. Irvan Tanri Liwang, Sp.B., Subsp.Onk(K)'],
   'Urologi': ['dr. Poppy Desra Syahfitri Nasution, Sp.U','dr. Made Adi Wiratama, Sp.U, M.Ked.Klin, FICS','dr. Muhammad Rozaqy Ishaq, Sp.U, M.Ked.Klin','dr. Boyke Soebhali, Sp.U(K)','dr. Ricky Agave Ompusunggu, Sp.U'],
   'BTKV': ['dr. Ivan Joalsen Mangara Tua, Sp.BTKV, Subsp-VE(K)','dr. Michael Caesario, Sp.BTKV(K)','dr. Ery Irawan, Sp.BTKV, M.Ked.Klin.','dr. David Hermawan Christian, Sp.BTKV, M.Ked.Klin.(K)'],
   'Bedah Digestif & Umum': ['dr. Bambang Suprapto, Sp. B(K)BD','dr. Ahmad Toboroni Nasution, Sp. B(K)BD'],
@@ -33,6 +33,26 @@ export const PEDIATRIC_CONSULTANTS: string[] = [
 export function getAllKnownDoctors(extraDpjps: string[] = []): string[] {
   const fromDivisions = Object.values(DIVISION_CONSULTANTS).flat();
   return [...new Set([...fromDivisions, ...PEDIATRIC_CONSULTANTS, ...extraDpjps])].filter(Boolean);
+}
+
+/**
+ * Daftar dokter DPJP yang dapat dipilih saat status pasien adalah Raber atau Konsul.
+ * Dokter DPJP utama dapat berasal dari divisi bedah mana pun (Digestif, Bedah Anak, Plastik, Ortopedi, dll.)
+ * maupun dokter anak / spesialis lain.
+ */
+export function getAllSupervisingDoctors(extraDpjps: string[] = []): string[] {
+  return getAllKnownDoctors(extraDpjps);
+}
+
+/**
+ * Mengelompokkan dokter konsulen per divisi untuk memudahkan pemilihan cepat DPJP Utama
+ * di form pasien berdasarkan divisi yang merawat.
+ */
+export function getSupervisingDoctorsByDivision(): Record<string, string[]> {
+  return {
+    ...DIVISION_CONSULTANTS,
+    'Dokter Anak': PEDIATRIC_CONSULTANTS,
+  };
 }
 
 /**

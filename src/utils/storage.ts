@@ -119,7 +119,29 @@ export function incrementPodInDiagnosis(dx: string | null | undefined, daysToAdd
   });
 }
 export function getDefaultTeam(division:string,koasName?:string):DivisionTeam{return {teamCode:getDefaultTeamCode(division),division,teamName:`Tim ${division}`,members:[koasName||'dr. Muda / Koas Bedah']};}
-export function getActiveTeam(defaultDivision?:string,defaultKoasName?:string):DivisionTeam{const raw=localStorage.getItem(`${KEY_PREFIX}:activeTeam`);if(raw){try{const parsed=JSON.parse(raw);if(parsed&&parsed.teamCode){if(defaultDivision&&parsed.division!==defaultDivision){parsed.division=defaultDivision;if(!parsed.teamName||parsed.teamName.startsWith('Tim '))parsed.teamName=`Tim ${defaultDivision}`;localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(parsed));}return parsed;}}catch{}}const div=defaultDivision||'Bedah Digestif & Umum';const def=getDefaultTeam(div,defaultKoasName);localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(def));return def;}
+export function getActiveTeam(defaultDivision?:string,defaultKoasName?:string):DivisionTeam{
+  const raw = localStorage.getItem(`${KEY_PREFIX}:activeTeam`);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.teamCode === 'string') {
+        if (!parsed.teamCode) {
+          return { teamCode: '', division: parsed.division || defaultDivision || '', teamName: '', members: [] };
+        }
+        if (defaultDivision && parsed.division !== defaultDivision) {
+          parsed.division = defaultDivision;
+          if (!parsed.teamName || parsed.teamName.startsWith('Tim ')) parsed.teamName = `Tim ${defaultDivision}`;
+          localStorage.setItem(`${KEY_PREFIX}:activeTeam`, JSON.stringify(parsed));
+        }
+        return parsed;
+      }
+    } catch {}
+  }
+  const div = defaultDivision || 'Bedah Digestif & Umum';
+  const def = getDefaultTeam(div, defaultKoasName);
+  localStorage.setItem(`${KEY_PREFIX}:activeTeam`, JSON.stringify(def));
+  return def;
+}
 export function setActiveTeam(team:DivisionTeam):void{localStorage.setItem(`${KEY_PREFIX}:activeTeam`,JSON.stringify(team));}
 export const OLD_FAHAD_REGEX = /fahad.*khaisama/i;
 export const TARGET_FAHAD_NAME = 'dr. Fahad Ahmed Shah K., Sp.BA';
@@ -534,6 +556,108 @@ export function calculateAgeFromDob(dobStr: string, refDate: string = today()): 
     return `${years} th ${months} bln`;
   }
   return `${years} th`;
+}
+
+export function normalizeDob(raw?: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let str = raw.trim();
+  str = str.replace(/^(dob|ttl|tgl\s*lahir|tanggal\s*lahir|lahir)\s*[:=\s\-]+/i, '').trim();
+  if (!str) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  const monthMap: Record<string, string> = {
+    jan: '01', januari: '01', january: '01',
+    feb: '02', februari: '02', february: '02',
+    mar: '03', maret: '03', march: '03',
+    apr: '04', april: '04',
+    mei: '05', may: '05',
+    jun: '06', juni: '06', june: '06',
+    jul: '07', juli: '07', july: '07',
+    agu: '08', agt: '08', agustus: '08', aug: '08', august: '08',
+    sep: '09', september: '09',
+    okt: '10', oktober: '10', oct: '10', october: '10',
+    nov: '11', november: '11',
+    des: '12', desember: '12', dec: '12', december: '12',
+  };
+
+  const textMonthMatch = str.match(/^(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{4})$/);
+  if (textMonthMatch) {
+    const d = textMonthMatch[1].padStart(2, '0');
+    const mStr = textMonthMatch[2].toLowerCase();
+    const m = monthMap[mStr];
+    const y = textMonthMatch[3];
+    if (m) return `${y}-${m}-${d}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  const dmyShortMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  if (dmyShortMatch) {
+    const d = dmyShortMatch[1].padStart(2, '0');
+    const m = dmyShortMatch[2].padStart(2, '0');
+    const yr = parseInt(dmyShortMatch[3], 10);
+    const curYrShort = new Date().getFullYear() % 100;
+    const y = yr <= curYrShort ? 2000 + yr : 1900 + yr;
+    return `${y}-${m}-${d}`;
+  }
+
+  const ymdMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, '0');
+    const d = ymdMatch[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 1900 && parsed.getFullYear() <= new Date().getFullYear() + 1) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return '';
+}
+
+export function extractDobFromRawText(fullText: string, patientName?: string, rm?: string): string {
+  if (!fullText) return '';
+  let searchWindow = fullText;
+  if (patientName && patientName.trim()) {
+    const cleanName = patientName.replace(/^(tn\.?|ny\.?|an\.?|by\.?|nn\.?|sdr\.?|sdri\.?|tuan|nyonya|anak|bayi)\s+/i, '').trim();
+    if (cleanName.length >= 2) {
+      const idx = fullText.toLowerCase().indexOf(cleanName.toLowerCase());
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 100);
+        const end = Math.min(fullText.length, idx + 450);
+        searchWindow = fullText.substring(start, end);
+      }
+    }
+  } else if (rm && rm.trim()) {
+    const idx = fullText.indexOf(rm.trim());
+    if (idx !== -1) {
+      const start = Math.max(0, idx - 150);
+      const end = Math.min(fullText.length, idx + 350);
+      searchWindow = fullText.substring(start, end);
+    }
+  }
+
+  const dobRegex = /(?:dob|ttl|tgl(?:\.|\s+)?lahir|tanggal\s+lahir|lahir)\s*[:=\-]?\s*([0-9]{1,4}[/\-.][0-9]{1,2}[/\-.][0-9]{1,4}|[0-9]{1,2}[\s\-]+[a-zA-Z]+[\s\-]+[0-9]{4})/i;
+  const match = searchWindow.match(dobRegex);
+  if (match && match[1]) {
+    const normalized = normalizeDob(match[1]);
+    if (normalized) return normalized;
+  }
+  return '';
 }
 
 export function normalizeRmKey(rm?:string|null):string{const clean=(rm||'').trim().replace(/[^a-zA-Z0-9]/g,'').toLowerCase();return clean.replace(/^0+/,'')||clean;}

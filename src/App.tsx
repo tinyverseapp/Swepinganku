@@ -406,24 +406,10 @@ export default function App() {
     if (!cleanCode) return;
 
     try {
-      // 1. Sinkronisasi hapus keanggotaan di Firebase
-      if (auth.currentUser?.uid) {
-        const remainingJoined = loadJoinedTeams().filter(
-          (t) => t.teamCode.trim().toUpperCase() !== cleanCode
-        );
-        const nextActive = remainingJoined[remainingJoined.length - 1]?.teamCode || '';
-        await removeUserTeamFromFirebase(
-          auth.currentUser.uid,
-          cleanCode,
-          nextActive,
-          auth.currentUser.displayName || koasName
-        );
-      }
-
-      // 2. Hapus dari riwayat tim lokal di perangkat
+      // 1. Invalidate and remove from local caches across all storage keys immediately
       const remainingTeams = removeJoinedTeam(cleanCode);
 
-      // 3. Jika tim yang ditinggalkan adalah tim aktif saat ini, beralih ke tim lain atau state kosong
+      // 2. If the team being left is the active team, switch to next joined team or clear to empty state
       if (activeTeam.teamCode?.trim().toUpperCase() === cleanCode) {
         const nextTeam = remainingTeams[remainingTeams.length - 1] || null;
         if (nextTeam) {
@@ -444,9 +430,20 @@ export default function App() {
       } else {
         showToast(`Berhasil keluar dari tim ${cleanCode}.`);
       }
+
+      // 3. Sync membership removal to Firebase so all devices and cloud reflect the change
+      if (auth.currentUser?.uid) {
+        const nextActive = remainingTeams[remainingTeams.length - 1]?.teamCode || '';
+        await removeUserTeamFromFirebase(
+          auth.currentUser.uid,
+          cleanCode,
+          nextActive,
+          auth.currentUser.displayName || koasName
+        );
+      }
     } catch (error: any) {
-      console.error('Gagal keluar dari tim:', error);
-      showToast(`Gagal keluar dari tim: ${error?.message || 'terjadi kendala jaringan'}`);
+      console.error('Gagal sinkronisasi keluar tim:', error);
+      showToast(`Peringatan cloud: ${error?.message || 'terjadi kendala jaringan'}`);
     }
   };
 
@@ -488,7 +485,7 @@ export default function App() {
     <Topbar koasName={koasName} onUpdateKoasName={handleUpdateKoasName} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} pageMode={pageMode} onPageModeChange={setPageMode} onOpenNextjsModal={() => setIsNextjsModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onOpenSettings={() => setIsSettingsModalOpen(true)} />
     <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
       {pageMode === 'document' ? <DocumentSweepingView patients={patients} date={date} division={division} koasName={koasName} dpjps={existingDpjps} allRooms={DEFAULT_ROOMS} onDateChange={handleDateChange} onBackToDashboard={() => setPageMode('dashboard')} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onEditPatient={(patient) => { setEditingPatient(patient); setIsPatientModalOpen(true); }} onTogglePresence={handleTogglePresenceStatus} onDeletePatient={(patient) => setDeletingPatient(patient)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onHandoverPatients={handleOpenHandoverModal} onOpenAiImport={() => setIsAiImportModalOpen(true)} /> : <>
-        <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} onOpenTeamModal={() => setIsTeamModalOpen(true)} onLeaveTeam={handleLeaveTeam} onHandoverPatients={handleOpenHandoverModal} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
+        <ControlsBar date={date} division={division} divisions={DIVISIONS} onDateChange={handleDateChange} onDivisionChange={handleDivisionChange} searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenWeekly={() => setIsWeeklyModalOpen(true)} activeTeam={activeTeam} koasName={koasName} onOpenTeamModal={() => setIsTeamModalOpen(true)} onLeaveTeam={handleLeaveTeam} onHandoverPatients={handleOpenHandoverModal} onAddPatient={() => { setEditingPatient(null); setIsPatientModalOpen(true); }} onOpenAiImport={() => setIsAiImportModalOpen(true)} />
         <WeekDaysBar currentDate={date} division={division} currentPatientCount={patients.length} onSelectDate={handleDateChange} onCopyFromDay={handleCopyFromDay} onDeleteAllDay={(dDate, dName, count) => setDeleteAllDayTarget({ date: dDate, dayName: dName, count })} teamCode={activeTeam.teamCode} />
         <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">

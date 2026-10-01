@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Calendar,
   KeyRound,
@@ -7,12 +7,14 @@ import {
   UserPlus,
   Sparkles,
   FileSpreadsheet,
-  LogOut
+  LogOut,
+  PlusCircle
 } from 'lucide-react';
 import { DivisionTeam } from '../types';
 import { getJoinedDivisions, getSavedActiveTeam } from '../utils/teamRegistry';
 import { useDivisionColors } from '../utils/divisionColors';
 import { AiSparkleIcon } from './AiSparkleIcon';
+import { LeaveTeamModal } from './LeaveTeamModal';
 
 interface ControlsBarProps {
   date: string;
@@ -27,6 +29,7 @@ interface ControlsBarProps {
   onOpenRoster?: () => void;
   onOpenDocumentView?: () => void;
   activeTeam?: DivisionTeam;
+  koasName?: string;
   onOpenTeamModal?: () => void;
   onLeaveTeam?: (teamCode: string) => Promise<void> | void;
   onHandoverPatients?: () => void;
@@ -42,12 +45,14 @@ export function ControlsBar({
   onDivisionChange,
   onOpenWeekly,
   activeTeam,
+  koasName,
   onOpenTeamModal,
   onLeaveTeam,
   onHandoverPatients,
   onAddPatient,
   onOpenAiImport
 }: ControlsBarProps) {
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const savedTeam = getSavedActiveTeam();
   const joinedDivisions = getJoinedDivisions();
   const effectiveDivision = savedTeam?.division || division;
@@ -62,6 +67,7 @@ export function ControlsBar({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-5 shadow-xs space-y-4">
+      {/* Banner Tim Aktif */}
       {activeTeam && activeTeam.teamCode && onOpenTeamModal && (
         <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border shadow-2xs transition-all ${activeTheme.bannerBg}`}>
           <div className="flex items-start gap-2.5">
@@ -100,14 +106,7 @@ export function ControlsBar({
             {onLeaveTeam && (
               <button
                 type="button"
-                onClick={() => {
-                  const confirmLeave = window.confirm(
-                    `Keluar dari Tim ${activeTeam.teamName || activeTeam.division} (PIN: ${activeTeam.teamCode})?\n\nAkun Anda akan dihapus dari daftar anggota tim ini. Data pasien tim tetap tersimpan dan aman untuk anggota lainnya.`
-                  );
-                  if (confirmLeave) {
-                    onLeaveTeam(activeTeam.teamCode);
-                  }
-                }}
+                onClick={() => setIsLeaveModalOpen(true)}
                 className="flex-1 sm:flex-initial px-3 py-2 text-xs font-bold bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer min-h-[38px]"
                 title="Keluar dari tim aktif ini"
               >
@@ -117,6 +116,46 @@ export function ControlsBar({
             )}
           </div>
         </div>
+      )}
+
+      {/* Banner Saat Belum/Sudah Keluar dari Semua Tim */}
+      {(!activeTeam || !activeTeam.teamCode) && onOpenTeamModal && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/90 text-slate-700 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-900">Belum Terhubung ke Tim Stase</div>
+              <p className="text-[11px] text-slate-500">
+                Pilih atau masukkan PIN tim stase Anda untuk mulai sinkronisasi dan berbagi data pasien secara real-time.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenTeamModal}
+            className="px-3.5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer shrink-0 min-h-[38px]"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Gabung / Pilih Tim</span>
+          </button>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Keluar Tim */}
+      {activeTeam && activeTeam.teamCode && (
+        <LeaveTeamModal
+          isOpen={isLeaveModalOpen}
+          team={activeTeam}
+          userName={koasName}
+          onClose={() => setIsLeaveModalOpen(false)}
+          onConfirmLeave={async (code) => {
+            if (onLeaveTeam) {
+              await onLeaveTeam(code);
+            }
+          }}
+        />
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">

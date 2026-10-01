@@ -81,7 +81,8 @@ export async function parsePatientsWithAi(
   division: string,
   knownRooms: string[] = [],
   knownDpjps: string[] = [],
-  knownPediatricDpjps: string[] = []
+  knownPediatricDpjps: string[] = [],
+  allDivisionsDoctors?: Record<string, string[]>
 ): Promise<ParsedPatientRaw[]> {
   // ── Tahap 1: Validasi sesi & kuota (pisah dari fetch agar error-nya jelas) ──
   const user = auth.currentUser;
@@ -116,7 +117,14 @@ export async function parsePatientsWithAi(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ text, division, knownRooms, knownDpjps, knownPediatricDpjps }),
+      body: JSON.stringify({
+        text,
+        division,
+        knownRooms,
+        knownDpjps,
+        knownPediatricDpjps,
+        allDivisionsDoctors,
+      }),
     });
   } catch (err: any) {
     throw new Error('Tidak dapat terhubung ke server AI. Periksa koneksi internet Anda atau coba sesaat lagi.');

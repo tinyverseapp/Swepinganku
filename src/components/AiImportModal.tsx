@@ -3,8 +3,16 @@ import { X, ClipboardPaste, Trash2, CheckCircle2, AlertCircle, Plus, FileText, R
 import { AiSparkleIcon } from './AiSparkleIcon';
 import { Patient } from '../types';
 import { parsePatientsWithAi, ParsedPatientRaw } from '../lib/aiService';
-import { MASTER_ROOMS, PEDIATRIC_CONSULTANTS, normalizeRoomName, getAllKnownDoctors, fuzzyMatchDoctor } from '../data/constants';
-import { formatIndonesianDate, calculateAgeFromDob } from '../utils/storage';
+import {
+  MASTER_ROOMS,
+  PEDIATRIC_CONSULTANTS,
+  DIVISION_CONSULTANTS,
+  getAllSupervisingDoctors,
+  normalizeRoomName,
+  getAllKnownDoctors,
+  fuzzyMatchDoctor
+} from '../data/constants';
+import { formatIndonesianDate, calculateAgeFromDob, normalizeDob, extractDobFromRawText } from '../utils/storage';
 
 interface AiImportModalProps {
   isOpen: boolean; onClose: () => void; division: string; date: string; teamCode?: string;
@@ -27,13 +35,20 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
   const [correctedNames, setCorrectedNames] = useState<Record<string, string>>({});
   if (!isOpen) return null;
 
-  const sampleNote = `Operan Pasien:\n\n1. An. Budi (L / 8 th) RM: 01-88-29\nRuang Mawar Bed 3\nDPJP: dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A\nRABER: dr. Santi Rini, Sp.BA\nDx: Hernia Inguinalis Lateralis Dextra\n\n2. An. Siti (P / 5 th) RM: 02-33-41\nRuang Teratai Kamar 2A\nDPJP: dr. Anrih Roi Manthurio, Sp.A\nKonsul Bedah Anak ke dr. Santi Rini, Sp.BA\nDx: Appendisitis Akut`;
+  const sampleNote = `Operan Pasien:\n\n1. An. Budi (L / DOB: 12/05/2016 / 8 th) RM: 01-88-29\nRuang Mawar Bed 3\nDPJP: dr. Bambang Suprapto, Sp. B(K)BD\nRABER: dr. Santi Rini, Sp.BA\nDx: Hernia Inguinalis Lateralis Dextra\n\n2. Ny. Siti (P / 45 th / DOB: 1980-03-24) RM: 02-33-41\nRuang Melati Bed 2\nDPJP: dr. Yasser Ridwan, Sp.OT\nKonsul Bedah Plastik ke dr. Andi Mohammad Ardan, Sp. BP-RE\nDx: Soft tissue defect antebrachii\n\n3. By. Rio (L / DOB: 15/09/2024 / 2 bln) RM: 03-12-88\nRuang PICU Bed 1\nDPJP: dr. Ahmad Wisnu Wardhana, M.Sc., Sp.A\nRABER: dr. Fahad Ahmed Shah K., Sp.BA\nDx: Hirschsprung Disease`;
 
   const handleRunAi = async () => {
     if (!inputText.trim()) { setError('Silakan masukkan atau tempel catatan pasien terlebih dahulu.'); return; }
     setIsLoading(true); setError(null);
     try {
-      const results = await parsePatientsWithAi(inputText, division, knownRooms, knownDpjps, PEDIATRIC_CONSULTANTS);
+      const results = await parsePatientsWithAi(
+        inputText,
+        division,
+        knownRooms,
+        knownDpjps,
+        PEDIATRIC_CONSULTANTS,
+        DIVISION_CONSULTANTS
+      );
       if (!results?.length) { setError('AI tidak mendeteksi data pasien pada teks yang diberikan.'); setParsedList([]); }
       else {
         // Auto-koreksi nama dokter: cocokkan nama pendek dari AI ke nama lengkap di database
@@ -60,12 +75,19 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
             }
           }
 
-          let patientAge = p.age;
-          if (p.dob && (!patientAge || !patientAge.trim())) {
-            patientAge = calculateAgeFromDob(p.dob, date) || patientAge;
+          // Deteksi dan normalisasi DOB
+          let patientDob = p.dob ? normalizeDob(p.dob) : '';
+          if (!patientDob) {
+            // Fallback ekstraksi dari teks catatan bila AI melewatkan teks DOB
+            patientDob = extractDobFromRawText(inputText, p.name, p.rm);
           }
 
-          return { ...p, age: patientAge, dpjp, supervisingDpjp };
+          let patientAge = p.age;
+          if (patientDob && (!patientAge || !patientAge.trim())) {
+            patientAge = calculateAgeFromDob(patientDob, date) || patientAge;
+          }
+
+          return { ...p, dob: patientDob || undefined, age: patientAge, dpjp, supervisingDpjp };
         });
 
         setCorrectedNames(corrections);
@@ -191,7 +213,7 @@ export function AiImportModal({ isOpen, onClose, division, date, teamCode, known
                   ✓ Dikoreksi dari: <span className="font-normal italic">{correctedNames[`${index}:supervisingDpjp`]}</span>
                 </span>
               )}
-              <input value={p.supervisingDpjp || ''} onChange={(e) => updateItem(index, 'supervisingDpjp', e.target.value)} list={`ai-supervising-${index}`} placeholder="Contoh: dr. Ahmad Wisnu Wardhana, Sp.A" className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white ${correctedNames[`${index}:supervisingDpjp`] ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300'}`} /><datalist id={`ai-supervising-${index}`}>{[...new Set([...PEDIATRIC_CONSULTANTS, ...knownDpjps])].map((d) => <option key={d} value={d} />)}</datalist></label>}</div>
+              <input value={p.supervisingDpjp || ''} onChange={(e) => updateItem(index, 'supervisingDpjp', e.target.value)} list={`ai-supervising-${index}`} placeholder="Contoh: dr. Bambang Suprapto, Sp. B(K)BD atau dr. Ahmad Wisnu Wardhana, Sp.A" className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white ${correctedNames[`${index}:supervisingDpjp`] ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300'}`} /><datalist id={`ai-supervising-${index}`}>{getAllSupervisingDoctors(knownDpjps).map((d) => <option key={d} value={d} />)}</datalist></label>}</div>
           </div>; })}
           <button type="button" onClick={handleConfirmImport} className="w-full min-h-11 rounded-xl bg-emerald-600 text-white font-bold text-sm"><CheckCircle2 className="w-4 h-4 inline mr-2" />Impor {parsedList.length} Pasien ke Database</button>
         </div>}

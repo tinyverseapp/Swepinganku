@@ -248,7 +248,7 @@ export function TeamSwitchModal({
       setTeamToLeave(null);
 
       // Jika yang dikeluarkan adalah tim aktif dan tidak ada tim lain, tutup modal
-      if (code.trim().toUpperCase() === currentTeam.teamCode?.trim().toUpperCase()) {
+      if (code.trim().toUpperCase() === currentTeam?.teamCode?.trim().toUpperCase()) {
         if (updated.length === 0) {
           onClose();
         }

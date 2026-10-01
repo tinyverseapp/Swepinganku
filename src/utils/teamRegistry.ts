@@ -35,13 +35,49 @@ export function saveJoinedTeam(team: DivisionTeam): void {
   }
 }
 
-/** Remove a team from this account's local membership cache. */
+/** Remove a team from this account's local membership cache across all key variants. */
 export function removeJoinedTeam(teamCode: string): DivisionTeam[] {
+  if (!teamCode) return loadJoinedTeams();
+  const normalizedCode = teamCode.trim().toUpperCase();
   try {
-    const normalizedCode = teamCode.trim().toUpperCase();
-    const next = loadJoinedTeams().filter((team) => team.teamCode.trim().toUpperCase() !== normalizedCode);
-    localStorage.setItem(getKey(), JSON.stringify(next));
-    return next;
+    const keysToCheck = [getKey(), KEY, `${KEY}:anonymous`];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(KEY) && !keysToCheck.includes(k)) {
+        keysToCheck.push(k);
+      }
+    }
+
+    for (const k of keysToCheck) {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(
+              (item) => item?.teamCode && item.teamCode.trim().toUpperCase() !== normalizedCode
+            );
+            localStorage.setItem(k, JSON.stringify(filtered));
+          }
+        }
+      } catch {}
+    }
+
+    // Also check and invalidate activeTeam if it is the team being left
+    try {
+      const activeRaw = localStorage.getItem('sweepinganku:activeTeam');
+      if (activeRaw) {
+        const active = JSON.parse(activeRaw);
+        if (active?.teamCode && active.teamCode.trim().toUpperCase() === normalizedCode) {
+          localStorage.setItem(
+            'sweepinganku:activeTeam',
+            JSON.stringify({ teamCode: '', division: '', teamName: '', members: [] })
+          );
+        }
+      }
+    } catch {}
+
+    return loadJoinedTeams();
   } catch {
     return loadJoinedTeams();
   }
